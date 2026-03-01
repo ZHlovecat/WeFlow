@@ -74,6 +74,11 @@ export interface ElectronAPI {
   chat: {
     connect: () => Promise<{ success: boolean; error?: string }>
     getSessions: () => Promise<{ success: boolean; sessions?: ChatSession[]; error?: string }>
+    getSessionStatuses: (usernames: string[]) => Promise<{
+      success: boolean
+      map?: Record<string, { isFolded?: boolean; isMuted?: boolean }>
+      error?: string
+    }>
     getExportTabCounts: () => Promise<{
       success: boolean
       counts?: {

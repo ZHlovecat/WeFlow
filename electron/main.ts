@@ -912,6 +912,10 @@ function registerIpcHandlers() {
     return chatService.getSessions()
   })
 
+  ipcMain.handle('chat:getSessionStatuses', async (_, usernames: string[]) => {
+    return chatService.getSessionStatuses(usernames)
+  })
+
   ipcMain.handle('chat:getExportTabCounts', async () => {
     return chatService.getExportTabCounts()
   })

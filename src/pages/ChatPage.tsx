@@ -317,6 +317,7 @@ function ChatPage(_props: ChatPageProps) {
   const [isRefreshingSessions, setIsRefreshingSessions] = useState(false)
   const [foldedView, setFoldedView] = useState(false) // 是否在"折叠的群聊"视图
   const [hasInitialMessages, setHasInitialMessages] = useState(false)
+  const [isSessionSwitching, setIsSessionSwitching] = useState(false)
   const [noMessageTable, setNoMessageTable] = useState(false)
   const [fallbackDisplayName, setFallbackDisplayName] = useState<string | null>(null)
   const [showVoiceTranscribeDialog, setShowVoiceTranscribeDialog] = useState(false)
@@ -376,6 +377,7 @@ function ChatPage(_props: ChatPageProps) {
   const sessionMapRef = useRef<Map<string, ChatSession>>(new Map())
   const sessionsRef = useRef<ChatSession[]>([])
   const currentSessionRef = useRef<string | null>(null)
+  const pendingSessionLoadRef = useRef<string | null>(null)
   const prevSessionRef = useRef<string | null>(null)
   const isLoadingMessagesRef = useRef(false)
   const isLoadingMoreRef = useRef(false)
@@ -447,10 +449,10 @@ function ChatPage(_props: ChatPageProps) {
       const result = await window.electronAPI.chat.connect()
       if (result.success) {
         setConnected(true)
-        await loadSessions()
-        await loadMyAvatar()
+        const wxidPromise = window.electronAPI.config.get('myWxid')
+        await Promise.all([loadSessions(), loadMyAvatar()])
         // 获取 myWxid 用于匹配个人头像
-        const wxid = await window.electronAPI.config.get('myWxid')
+        const wxid = await wxidPromise
         if (wxid) setMyWxid(wxid as string)
       } else {
         setConnectionError(result.error || '连接失败')
@@ -467,6 +469,8 @@ function ChatPage(_props: ChatPageProps) {
     senderAvatarLoading.clear()
     preloadImageKeysRef.current.clear()
     lastPreloadSessionRef.current = null
+    pendingSessionLoadRef.current = null
+    setIsSessionSwitching(false)
     setSessionDetail(null)
     setCurrentSession(null)
     setSessions([])
@@ -499,6 +503,45 @@ function ChatPage(_props: ChatPageProps) {
     currentSessionRef.current = currentSessionId
   }, [currentSessionId])
 
+  const hydrateSessionStatuses = useCallback(async (sessionList: ChatSession[]) => {
+    const usernames = sessionList.map((s) => s.username).filter(Boolean)
+    if (usernames.length === 0) return
+
+    try {
+      const result = await window.electronAPI.chat.getSessionStatuses(usernames)
+      if (!result.success || !result.map) return
+
+      const statusMap = result.map
+      const { sessions: latestSessions } = useChatStore.getState()
+      if (!Array.isArray(latestSessions) || latestSessions.length === 0) return
+
+      let hasChanges = false
+      const updatedSessions = latestSessions.map((session) => {
+        const status = statusMap[session.username]
+        if (!status) return session
+
+        const nextIsFolded = status.isFolded ?? session.isFolded
+        const nextIsMuted = status.isMuted ?? session.isMuted
+        if (nextIsFolded === session.isFolded && nextIsMuted === session.isMuted) {
+          return session
+        }
+
+        hasChanges = true
+        return {
+          ...session,
+          isFolded: nextIsFolded,
+          isMuted: nextIsMuted
+        }
+      })
+
+      if (hasChanges) {
+        setSessions(updatedSessions)
+      }
+    } catch (e) {
+      console.warn('会话状态补齐失败:', e)
+    }
+  }, [setSessions])
+
   // 加载会话列表（优化：先返回基础数据，异步加载联系人信息）
   const loadSessions = async (options?: { silent?: boolean }) => {
     if (options?.silent) {
@@ -518,11 +561,13 @@ function ChatPage(_props: ChatPageProps) {
 
           setSessions(nextSessions)
           sessionsRef.current = nextSessions
+          void hydrateSessionStatuses(nextSessions)
           // 立即启动联系人信息加载，不再延迟 500ms
           void enrichSessionsContactInfo(nextSessions)
         } else {
           console.error('mergeSessions returned non-array:', nextSessions)
           setSessions(sessionsArray)
+          void hydrateSessionStatuses(sessionsArray)
           void enrichSessionsContactInfo(sessionsArray)
         }
       } else if (!result.success) {
@@ -575,8 +620,8 @@ function ChatPage(_props: ChatPageProps) {
 
 
 
-      // 进一步减少批次大小，每批3个，避免DLL调用阻塞
-      const batchSize = 3
+      // 批量补齐联系人，平衡吞吐和 UI 流畅性
+      const batchSize = 8
       let loadedCount = 0
 
       for (let i = 0; i < needEnrich.length; i += batchSize) {
@@ -585,7 +630,7 @@ function ChatPage(_props: ChatPageProps) {
 
           // 等待滚动结束
           while (isScrollingRef.current && !enrichCancelledRef.current) {
-            await new Promise(resolve => setTimeout(resolve, 200))
+            await new Promise(resolve => setTimeout(resolve, 120))
           }
           if (enrichCancelledRef.current) break
         }
@@ -602,11 +647,11 @@ function ChatPage(_props: ChatPageProps) {
           if ('requestIdleCallback' in window) {
             window.requestIdleCallback(() => {
               void loadContactInfoBatch(usernames).then(() => resolve())
-            }, { timeout: 2000 })
+            }, { timeout: 700 })
           } else {
             setTimeout(() => {
               void loadContactInfoBatch(usernames).then(() => resolve())
-            }, 300)
+            }, 80)
           }
         })
 
@@ -618,8 +663,7 @@ function ChatPage(_props: ChatPageProps) {
 
         // 批次间延迟，给UI更多时间（DLL调用可能阻塞，需要更长的延迟）
         if (i + batchSize < needEnrich.length && !enrichCancelledRef.current) {
-          // 如果不在滚动，可以延迟短一点
-          const delay = isScrollingRef.current ? 1000 : 800
+          const delay = isScrollingRef.current ? 260 : 120
           await new Promise(resolve => setTimeout(resolve, delay))
         }
       }
@@ -649,17 +693,17 @@ function ChatPage(_props: ChatPageProps) {
       contactUpdateTimerRef.current = null
     }
 
-    // 增加防抖延迟到500ms，避免在滚动时频繁更新
+    // 使用短防抖，让头像和昵称更快补齐但依然避免频繁重渲染
     contactUpdateTimerRef.current = window.setTimeout(() => {
       const updates = contactUpdateQueueRef.current
       if (updates.size === 0) return
 
       const now = Date.now()
-      // 如果距离上次更新太近（小于1秒），继续延迟
-      if (now - lastUpdateTimeRef.current < 1000) {
+      // 如果距离上次更新太近（小于250ms），继续延迟
+      if (now - lastUpdateTimeRef.current < 250) {
         contactUpdateTimerRef.current = window.setTimeout(() => {
           flushContactUpdates()
-        }, 1000 - (now - lastUpdateTimeRef.current))
+        }, 250 - (now - lastUpdateTimeRef.current))
         return
       }
 
@@ -696,7 +740,7 @@ function ChatPage(_props: ChatPageProps) {
 
       updates.clear()
       contactUpdateTimerRef.current = null
-    }, 500) // 500ms 防抖，减少更新频率
+    }, 120)
   }, [setSessions])
 
   // 加载一批联系人信息并更新会话列表（优化：使用队列批量更新）
@@ -885,7 +929,8 @@ function ChatPage(_props: ChatPageProps) {
 
     if (offset === 0) {
       setLoadingMessages(true)
-      setMessages([])
+      // 切会话时保留旧内容作为过渡，避免大面积闪烁
+      setHasInitialMessages(true)
     } else {
       setLoadingMore(true)
     }
@@ -899,6 +944,9 @@ function ChatPage(_props: ChatPageProps) {
         messages?: Message[];
         hasMore?: boolean;
         error?: string
+      }
+      if (currentSessionRef.current !== sessionId) {
+        return
       }
       if (result.success && result.messages) {
         if (offset === 0) {
@@ -996,9 +1044,16 @@ function ChatPage(_props: ChatPageProps) {
       console.error('加载消息失败:', e)
       setConnectionError('加载消息失败')
       setHasMoreMessages(false)
+      if (offset === 0 && currentSessionRef.current === sessionId) {
+        setMessages([])
+      }
     } finally {
       setLoadingMessages(false)
       setLoadingMore(false)
+      if (offset === 0 && pendingSessionLoadRef.current === sessionId) {
+        pendingSessionLoadRef.current = null
+        setIsSessionSwitching(false)
+      }
     }
   }
 
@@ -1042,11 +1097,13 @@ function ChatPage(_props: ChatPageProps) {
       return
     }
     if (session.username === currentSessionId) return
-    setCurrentSession(session.username)
+    pendingSessionLoadRef.current = session.username
+    setIsSessionSwitching(true)
+    setCurrentSession(session.username, { preserveMessages: true })
     setCurrentOffset(0)
     setJumpStartTime(0)
     setJumpEndTime(0)
-    loadMessages(session.username, 0, 0, 0)
+    void loadMessages(session.username, 0, 0, 0)
     // 重置详情面板
     setSessionDetail(null)
     if (showDetailPanel) {
@@ -1367,6 +1424,10 @@ function ChatPage(_props: ChatPageProps) {
       s.summary.toLowerCase().includes(lower)
     )
   }, [sessions, searchKeyword, foldedView])
+
+  const hasSessionRecords = Array.isArray(sessions) && sessions.length > 0
+  const shouldShowSessionsSkeleton = isLoadingSessions && !hasSessionRecords
+  const isSessionListSyncing = (isLoadingSessions || isRefreshingSessions) && hasSessionRecords
 
 
   // 格式化会话时间（相对时间）- 使用 useMemo 缓存，避免每次渲染都计算
@@ -2068,6 +2129,12 @@ function ChatPage(_props: ChatPageProps) {
               <button className="icon-btn refresh-btn" onClick={handleRefresh} disabled={isLoadingSessions || isRefreshingSessions}>
                 <RefreshCw size={16} className={(isLoadingSessions || isRefreshingSessions) ? 'spin' : ''} />
               </button>
+              {isSessionListSyncing && (
+                <div className="session-sync-indicator">
+                  <Loader2 size={12} className="spin" />
+                  <span>同步中</span>
+                </div>
+              )}
             </div>
           </div>
           {/* 折叠群 header */}
@@ -2093,7 +2160,7 @@ function ChatPage(_props: ChatPageProps) {
         )}
 
         {/* ... (previous content) ... */}
-        {isLoadingSessions ? (
+        {shouldShowSessionsSkeleton ? (
           <div className="loading-sessions">
             {[1, 2, 3, 4, 5].map(i => (
               <div key={i} className="skeleton-item">
@@ -2311,11 +2378,11 @@ function ChatPage(_props: ChatPageProps) {
               </div>
             </div>
 
-            <div className={`message-content-wrapper ${hasInitialMessages ? 'loaded' : 'loading'}`}>
-              {isLoadingMessages && !hasInitialMessages && (
+            <div className={`message-content-wrapper ${hasInitialMessages ? 'loaded' : 'loading'} ${isSessionSwitching ? 'switching' : ''}`}>
+              {isLoadingMessages && (!hasInitialMessages || isSessionSwitching) && (
                 <div className="loading-messages loading-overlay">
                   <Loader2 size={24} />
-                  <span>加载消息中...</span>
+                  <span>{isSessionSwitching ? '切换会话中...' : '加载消息中...'}</span>
                 </div>
               )}
               <div

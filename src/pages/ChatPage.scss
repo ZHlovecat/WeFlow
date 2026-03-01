@@ -815,6 +815,24 @@
     min-width: 0;
   }
 
+  .session-sync-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: var(--bg-primary);
+    color: var(--text-tertiary);
+    font-size: 11px;
+    white-space: nowrap;
+    border: 1px solid var(--border-color);
+    flex-shrink: 0;
+
+    .spin {
+      animation: spin 0.9s linear infinite;
+    }
+  }
+
   .search-box {
     flex: 1;
     display: flex;
@@ -1651,6 +1669,18 @@
     opacity: 0;
     pointer-events: none;
   }
+
+  &.switching .message-list {
+    opacity: 0.42;
+    transform: scale(0.995);
+    filter: saturate(0.72) blur(1px);
+    pointer-events: none;
+  }
+
+  &.switching .loading-overlay {
+    background: rgba(127, 127, 127, 0.18);
+    backdrop-filter: blur(4px);
+  }
 }
 
 .message-list {
@@ -1666,7 +1696,7 @@
   background-color: var(--bg-tertiary);
   position: relative;
   -webkit-app-region: no-drag !important;
-  transition: opacity 240ms ease, transform 240ms ease;
+  transition: opacity 240ms ease, transform 240ms ease, filter 220ms ease;
 
   // 滚动条样式
   &::-webkit-scrollbar {
@@ -4133,7 +4163,6 @@
     font-weight: 500;
   }
 }
-
 // 消息信息弹窗
 .message-info-overlay {
   position: fixed;

@@ -201,6 +201,8 @@ class ChatService {
   private sessionMessageCountHintCache = new Map<string, number>()
   private sessionMessageCountCacheScope = ''
   private readonly sessionMessageCountCacheTtlMs = 10 * 60 * 1000
+  private sessionStatusCache = new Map<string, { isFolded?: boolean; isMuted?: boolean; updatedAt: number }>()
+  private readonly sessionStatusCacheTtlMs = 10 * 60 * 1000
 
   constructor() {
     this.configService = new ConfigService()
@@ -386,7 +388,7 @@ class ChatService {
         return { success: false, error: `会话表异常: ${detail}${tableInfo}${tables}${columns}` }
       }
 
-      // 转换为 ChatSession（先加载缓存，但不等待数据库查询）
+      // 转换为 ChatSession（先加载缓存，但不等待额外状态查询）
       const sessions: ChatSession[] = []
       const now = Date.now()
       const myWxid = this.configService.get('myWxid')
@@ -449,7 +451,7 @@ class ChatService {
           avatarUrl = cached.avatarUrl
         }
 
-        sessions.push({
+        const nextSession: ChatSession = {
           username,
           type: parseInt(row.type || '0', 10),
           unreadCount: parseInt(row.unread_count || row.unreadCount || row.unreadcount || '0', 10),
@@ -463,7 +465,15 @@ class ChatService {
           lastMsgSender: row.last_msg_sender,
           lastSenderDisplayName: row.last_sender_display_name,
           selfWxid: myWxid
-        })
+        }
+
+        const cachedStatus = this.sessionStatusCache.get(username)
+        if (cachedStatus && now - cachedStatus.updatedAt <= this.sessionStatusCacheTtlMs) {
+          nextSession.isFolded = cachedStatus.isFolded
+          nextSession.isMuted = cachedStatus.isMuted
+        }
+
+        sessions.push(nextSession)
 
         if (typeof messageCountHint === 'number') {
           this.sessionMessageCountHintCache.set(username, messageCountHint)
@@ -474,28 +484,51 @@ class ChatService {
         }
       }
 
-      // 批量拉取 extra_buffer 状态（isFolded/isMuted），不阻塞主流程
-      const allUsernames = sessions.map(s => s.username)
-      try {
-        const statusResult = await wcdbService.getContactStatus(allUsernames)
-        if (statusResult.success && statusResult.map) {
-          for (const s of sessions) {
-            const st = statusResult.map[s.username]
-            if (st) {
-              s.isFolded = st.isFolded
-              s.isMuted = st.isMuted
-            }
-          }
-        }
-      } catch {
-        // 状态获取失败不影响会话列表返回
-      }
-
       // 不等待联系人信息加载，直接返回基础会话列表
       // 前端可以异步调用 enrichSessionsWithContacts 来补充信息
       return { success: true, sessions }
     } catch (e) {
       console.error('ChatService: 获取会话列表失败:', e)
+      return { success: false, error: String(e) }
+    }
+  }
+
+  async getSessionStatuses(usernames: string[]): Promise<{
+    success: boolean
+    map?: Record<string, { isFolded?: boolean; isMuted?: boolean }>
+    error?: string
+  }> {
+    try {
+      if (!Array.isArray(usernames) || usernames.length === 0) {
+        return { success: true, map: {} }
+      }
+
+      const connectResult = await this.ensureConnected()
+      if (!connectResult.success) {
+        return { success: false, error: connectResult.error }
+      }
+
+      const result = await wcdbService.getContactStatus(usernames)
+      if (!result.success || !result.map) {
+        return { success: false, error: result.error || '获取会话状态失败' }
+      }
+
+      const now = Date.now()
+      for (const username of usernames) {
+        const state = result.map[username]
+        if (!state) continue
+        this.sessionStatusCache.set(username, {
+          isFolded: state.isFolded,
+          isMuted: state.isMuted,
+          updatedAt: now
+        })
+      }
+
+      return {
+        success: true,
+        map: result.map as Record<string, { isFolded?: boolean; isMuted?: boolean }>
+      }
+    } catch (e) {
       return { success: false, error: String(e) }
     }
   }
@@ -1532,6 +1565,7 @@ class ChatService {
     this.sessionMessageCountCacheScope = scope
     this.sessionMessageCountCache.clear()
     this.sessionMessageCountHintCache.clear()
+    this.sessionStatusCache.clear()
   }
 
   private async collectSessionExportStats(
