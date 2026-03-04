@@ -483,6 +483,15 @@ export interface ElectronAPI {
       data?: number[]
       error?: string
     }>
+    startAvailableYearsLoad: () => Promise<{
+      success: boolean
+      taskId?: string
+      error?: string
+    }>
+    cancelAvailableYearsLoad: (taskId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
     generateReport: (year: number) => Promise<{
       success: boolean
       data?: {
@@ -567,6 +576,13 @@ export interface ElectronAPI {
       dir?: string
       error?: string
     }>
+    onAvailableYearsProgress: (callback: (payload: {
+      taskId: string
+      years?: number[]
+      done: boolean
+      error?: string
+      canceled?: boolean
+    }) => void) => () => void
     onProgress: (callback: (payload: { status: string; progress: number }) => void) => () => void
   }
   dualReport: {

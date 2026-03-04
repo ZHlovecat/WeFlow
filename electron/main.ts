@@ -102,6 +102,7 @@ interface ExportTaskControlState {
 
 const exportTaskControlMap = new Map<string, ExportTaskControlState>()
 const pendingExportTaskControlMap = new Map<string, ExportTaskControlState>()
+const annualReportYearsLoadTasks = new Map<string, { canceled: boolean }>()
 
 const getTaskControlState = (taskId?: string): ExportTaskControlState | null => {
   const normalized = typeof taskId === 'string' ? taskId.trim() : ''
@@ -119,6 +120,10 @@ const createTaskControlState = (taskId?: string): string | null => {
   })
   pendingExportTaskControlMap.delete(normalized)
   return normalized
+}
+
+const isYearsLoadCanceled = (taskId: string): boolean => {
+  return annualReportYearsLoadTasks.get(taskId)?.canceled === true
 }
 
 const clearTaskControlState = (taskId?: string): void => {
@@ -1532,6 +1537,67 @@ function registerIpcHandlers() {
       decryptKey: cfg.get('decryptKey'),
       wxid: cfg.get('myWxid')
     })
+  })
+
+  ipcMain.handle('annualReport:startAvailableYearsLoad', async (event) => {
+    const cfg = configService || new ConfigService()
+    configService = cfg
+
+    const taskId = `years_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    annualReportYearsLoadTasks.set(taskId, { canceled: false })
+    const sender = event.sender
+
+    const sendProgress = (payload: { years?: number[]; done: boolean; error?: string; canceled?: boolean }) => {
+      if (!sender.isDestroyed()) {
+        sender.send('annualReport:availableYearsProgress', {
+          taskId,
+          ...payload
+        })
+      }
+    }
+
+    void (async () => {
+      try {
+        const result = await annualReportService.getAvailableYears({
+          dbPath: cfg.get('dbPath'),
+          decryptKey: cfg.get('decryptKey'),
+          wxid: cfg.get('myWxid'),
+          onProgress: (years) => {
+            if (isYearsLoadCanceled(taskId)) return
+            sendProgress({ years, done: false })
+          },
+          shouldCancel: () => isYearsLoadCanceled(taskId)
+        })
+
+        const canceled = isYearsLoadCanceled(taskId)
+        annualReportYearsLoadTasks.delete(taskId)
+        if (canceled) {
+          sendProgress({ done: true, canceled: true })
+          return
+        }
+
+        if (result.success) {
+          sendProgress({ years: result.data || [], done: true })
+        } else {
+          sendProgress({ years: result.data || [], done: true, error: result.error || '加载年度数据失败' })
+        }
+      } catch (e) {
+        annualReportYearsLoadTasks.delete(taskId)
+        sendProgress({ done: true, error: String(e) })
+      }
+    })()
+
+    return { success: true, taskId }
+  })
+
+  ipcMain.handle('annualReport:cancelAvailableYearsLoad', async (_, taskId: string) => {
+    const key = String(taskId || '').trim()
+    if (!key) return { success: false, error: '任务ID不能为空' }
+    const task = annualReportYearsLoadTasks.get(key)
+    if (!task) return { success: true }
+    task.canceled = true
+    annualReportYearsLoadTasks.set(key, task)
+    return { success: true }
   })
 
   ipcMain.handle('annualReport:generateReport', async (_, year: number) => {
