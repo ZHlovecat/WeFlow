@@ -41,6 +41,7 @@ import { useContactTypeCountsStore } from '../stores/contactTypeCountsStore'
 import { SnsPostItem } from '../components/Sns/SnsPostItem'
 import { ContactSnsTimelineDialog } from '../components/Sns/ContactSnsTimelineDialog'
 import { ExportDateRangeDialog } from '../components/Export/ExportDateRangeDialog'
+import { ExportDefaultsSettingsForm, type ExportDefaultsSettingsPatch } from '../components/Export/ExportDefaultsSettingsForm'
 import type { SnsPost } from '../types/sns'
 import {
   cloneExportDateRange,
@@ -1282,8 +1283,14 @@ function ExportPage() {
   const [snsExportLivePhotos, setSnsExportLivePhotos] = useState(false)
   const [snsExportVideos, setSnsExportVideos] = useState(false)
   const [isTimeRangeDialogOpen, setIsTimeRangeDialogOpen] = useState(false)
+  const [isExportDefaultsModalOpen, setIsExportDefaultsModalOpen] = useState(false)
   const [timeRangeSelection, setTimeRangeSelection] = useState<ExportDateRangeSelection>(() => createDefaultExportDateRangeSelection())
+  const [exportDefaultFormat, setExportDefaultFormat] = useState<TextExportFormat>('excel')
   const [exportDefaultDateRangeSelection, setExportDefaultDateRangeSelection] = useState<ExportDateRangeSelection>(() => createDefaultExportDateRangeSelection())
+  const [exportDefaultMedia, setExportDefaultMedia] = useState(false)
+  const [exportDefaultVoiceAsText, setExportDefaultVoiceAsText] = useState(false)
+  const [exportDefaultExcelCompactColumns, setExportDefaultExcelCompactColumns] = useState(true)
+  const [exportDefaultConcurrency, setExportDefaultConcurrency] = useState(2)
 
   const [options, setOptions] = useState<ExportOptions>({
     format: 'json',
@@ -1785,8 +1792,9 @@ function ExportPage() {
     setIsBaseConfigLoading(true)
     let isReady = true
     try {
-      const [savedPath, savedMedia, savedVoiceAsText, savedExcelCompactColumns, savedTxtColumns, savedConcurrency, savedSessionMap, savedContentMap, savedSessionRecordMap, savedSnsPostCount, savedWriteLayout, savedSessionNameWithTypePrefix, savedDefaultDateRange, exportCacheScope] = await Promise.all([
+      const [savedPath, savedFormat, savedMedia, savedVoiceAsText, savedExcelCompactColumns, savedTxtColumns, savedConcurrency, savedSessionMap, savedContentMap, savedSessionRecordMap, savedSnsPostCount, savedWriteLayout, savedSessionNameWithTypePrefix, savedDefaultDateRange, exportCacheScope] = await Promise.all([
         configService.getExportPath(),
+        configService.getExportDefaultFormat(),
         configService.getExportDefaultMedia(),
         configService.getExportDefaultVoiceAsText(),
         configService.getExportDefaultExcelCompactColumns(),
@@ -1817,10 +1825,14 @@ function ExportPage() {
       setLastExportByContent(savedContentMap)
       setExportRecordsBySession(savedSessionRecordMap)
       setLastSnsExportPostCount(savedSnsPostCount)
+      setExportDefaultFormat((savedFormat as TextExportFormat) || 'excel')
+      setExportDefaultMedia(savedMedia ?? false)
+      setExportDefaultVoiceAsText(savedVoiceAsText ?? false)
+      setExportDefaultExcelCompactColumns(savedExcelCompactColumns ?? true)
+      setExportDefaultConcurrency(savedConcurrency ?? 2)
       const resolvedDefaultDateRange = resolveExportDateRangeConfig(savedDefaultDateRange)
       setExportDefaultDateRangeSelection(resolvedDefaultDateRange)
       setTimeRangeSelection(resolvedDefaultDateRange)
-      await configService.setExportDefaultFormat('json')
 
       if (cachedSnsStats && Date.now() - cachedSnsStats.updatedAt <= EXPORT_SNS_STATS_CACHE_STALE_MS) {
         setSnsStats({
@@ -1835,7 +1847,7 @@ function ExportPage() {
       const txtColumns = savedTxtColumns && savedTxtColumns.length > 0 ? savedTxtColumns : defaultTxtColumns
       setOptions(prev => ({
         ...prev,
-        format: 'json',
+        format: ((savedFormat as TextExportFormat) || 'excel'),
         exportMedia: savedMedia ?? prev.exportMedia,
         exportVoiceAsText: savedVoiceAsText ?? prev.exportVoiceAsText,
         excelCompactColumns: savedExcelCompactColumns ?? prev.excelCompactColumns,
@@ -3192,8 +3204,13 @@ function ExportPage() {
 
       const next: ExportOptions = {
         ...prev,
+        format: exportDefaultFormat,
         useAllTime: exportDefaultDateRangeSelection.useAllTime,
-        dateRange: nextDateRange
+        dateRange: nextDateRange,
+        exportMedia: exportDefaultMedia,
+        exportVoiceAsText: exportDefaultVoiceAsText,
+        excelCompactColumns: exportDefaultExcelCompactColumns,
+        exportConcurrency: exportDefaultConcurrency
       }
 
       if (payload.scope === 'sns') {
@@ -3220,7 +3237,14 @@ function ExportPage() {
 
       return next
     })
-  }, [exportDefaultDateRangeSelection])
+  }, [
+    exportDefaultDateRangeSelection,
+    exportDefaultExcelCompactColumns,
+    exportDefaultFormat,
+    exportDefaultMedia,
+    exportDefaultVoiceAsText,
+    exportDefaultConcurrency
+  ])
 
   const closeExportDialog = useCallback(() => {
     setExportDialog(prev => ({ ...prev, open: false }))
@@ -5147,6 +5171,27 @@ function ExportPage() {
     }
   }, [])
 
+  const handleExportDefaultsChanged = useCallback((patch: ExportDefaultsSettingsPatch) => {
+    if (patch.format) {
+      setExportDefaultFormat(patch.format as TextExportFormat)
+    }
+    if (patch.dateRange) {
+      setExportDefaultDateRangeSelection(patch.dateRange)
+    }
+    if (typeof patch.media === 'boolean') {
+      setExportDefaultMedia(patch.media)
+    }
+    if (typeof patch.voiceAsText === 'boolean') {
+      setExportDefaultVoiceAsText(patch.voiceAsText)
+    }
+    if (typeof patch.excelCompactColumns === 'boolean') {
+      setExportDefaultExcelCompactColumns(patch.excelCompactColumns)
+    }
+    if (typeof patch.concurrency === 'number') {
+      setExportDefaultConcurrency(patch.concurrency)
+    }
+  }, [])
+
   return (
     <div className="export-board-page">
       <div className="export-top-panel">
@@ -5186,6 +5231,16 @@ function ExportPage() {
                 await configService.setExportSessionNamePrefixEnabled(enabled)
               }}
             />
+
+            <div className="more-export-settings-control">
+              <button
+                className="more-export-settings-btn"
+                type="button"
+                onClick={() => setIsExportDefaultsModalOpen(true)}
+              >
+                更多导出设置
+              </button>
+            </div>
           </div>
 
           <button
@@ -5211,6 +5266,48 @@ function ExportPage() {
         onClose={closeTaskCenter}
         onTogglePerfTask={toggleTaskPerfDetail}
       />
+
+      {isExportDefaultsModalOpen && (
+        <div
+          className="export-defaults-modal-overlay"
+          onClick={() => setIsExportDefaultsModalOpen(false)}
+        >
+          <div
+            className="export-defaults-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="更多导出设置"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="export-defaults-modal-header">
+              <div>
+                <h3>更多导出设置</h3>
+                <p>这里的配置与设置页中的导出设置保持一致，并会立即生效。</p>
+              </div>
+              <button
+                className="close-icon-btn"
+                type="button"
+                onClick={() => setIsExportDefaultsModalOpen(false)}
+                aria-label="关闭更多导出设置"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="export-defaults-modal-body">
+              <ExportDefaultsSettingsForm onDefaultsChanged={handleExportDefaultsChanged} />
+            </div>
+            <div className="export-defaults-modal-actions">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => setIsExportDefaultsModalOpen(false)}
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="export-section-title-row">
         <h3 className="export-section-title">按类型批量导出</h3>
