@@ -5282,7 +5282,6 @@ function ExportPage() {
             <div className="export-defaults-modal-header">
               <div>
                 <h3>更多导出设置</h3>
-                <p>这里的配置与设置页中的导出设置保持一致，并会立即生效。</p>
               </div>
               <button
                 className="close-icon-btn"

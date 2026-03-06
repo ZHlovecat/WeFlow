@@ -128,6 +128,50 @@ export function ExportDefaultsSettingsForm({
     <div className={`export-defaults-settings-form ${layout === 'split' ? 'layout-split' : 'layout-stacked'}`}>
       <div className="form-group">
         <div className="form-copy">
+          <label>导出并发数</label>
+          <span className="form-hint">导出多个会话时的最大并发（1~6）</span>
+        </div>
+        <div className="form-control">
+          <div className="select-field" ref={exportConcurrencyDropdownRef}>
+            <button
+              type="button"
+              className={`select-trigger ${showExportConcurrencySelect ? 'open' : ''}`}
+              onClick={() => {
+                setShowExportConcurrencySelect(!showExportConcurrencySelect)
+                setShowExportFormatSelect(false)
+                setIsExportDateRangeDialogOpen(false)
+                setShowExportExcelColumnsSelect(false)
+              }}
+            >
+              <span className="select-value">{exportConcurrencyLabel}</span>
+              <ChevronDown size={16} />
+            </button>
+            {showExportConcurrencySelect && (
+              <div className="select-dropdown">
+                {exportConcurrencyOptions.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={`select-option ${exportDefaultConcurrency === option ? 'active' : ''}`}
+                    onClick={async () => {
+                      setExportDefaultConcurrency(option)
+                      await configService.setExportDefaultConcurrency(option)
+                      onDefaultsChanged?.({ concurrency: option })
+                      notify(`已将导出并发数设为 ${option}`, true)
+                      setShowExportConcurrencySelect(false)
+                    }}
+                  >
+                    <span className="option-label">{option}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="form-group">
+        <div className="form-copy">
           <label>默认导出格式</label>
           <span className="form-hint">导出页面默认选中的格式</span>
         </div>
@@ -310,49 +354,6 @@ export function ExportDefaultsSettingsForm({
         </div>
       </div>
 
-      <div className="form-group">
-        <div className="form-copy">
-          <label>导出并发数</label>
-          <span className="form-hint">导出多个会话时的最大并发（1~6）</span>
-        </div>
-        <div className="form-control">
-          <div className="select-field" ref={exportConcurrencyDropdownRef}>
-            <button
-              type="button"
-              className={`select-trigger ${showExportConcurrencySelect ? 'open' : ''}`}
-              onClick={() => {
-                setShowExportConcurrencySelect(!showExportConcurrencySelect)
-                setShowExportFormatSelect(false)
-                setIsExportDateRangeDialogOpen(false)
-                setShowExportExcelColumnsSelect(false)
-              }}
-            >
-              <span className="select-value">{exportConcurrencyLabel}</span>
-              <ChevronDown size={16} />
-            </button>
-            {showExportConcurrencySelect && (
-              <div className="select-dropdown">
-                {exportConcurrencyOptions.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    className={`select-option ${exportDefaultConcurrency === option ? 'active' : ''}`}
-                    onClick={async () => {
-                      setExportDefaultConcurrency(option)
-                      await configService.setExportDefaultConcurrency(option)
-                      onDefaultsChanged?.({ concurrency: option })
-                      notify(`已将导出并发数设为 ${option}`, true)
-                      setShowExportConcurrencySelect(false)
-                    }}
-                  >
-                    <span className="option-label">{option}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
