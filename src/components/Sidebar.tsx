@@ -284,7 +284,11 @@ function Sidebar({ collapsed }: SidebarProps) {
 
   const openSettingsFromAccountMenu = () => {
     setIsAccountMenuOpen(false)
-    navigate('/settings')
+    navigate('/settings', {
+      state: {
+        backgroundLocation: location
+      }
+    })
   }
 
   const handleConfirmClearAccountData = async () => {
@@ -432,7 +436,12 @@ function Sidebar({ collapsed }: SidebarProps) {
               setLocked(true)
               return
             }
-            navigate('/settings', { state: { initialTab: 'security' } })
+            navigate('/settings', {
+              state: {
+                initialTab: 'security',
+                backgroundLocation: location
+              }
+            })
           }}
           title={collapsed ? (authEnabled ? '锁定' : '未锁定') : undefined}
         >

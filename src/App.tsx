@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Routes, Route, Navigate, useNavigate, useLocation, type Location } from 'react-router-dom'
 import TitleBar from './components/TitleBar'
 import Sidebar from './components/Sidebar'
 import RouteGuard from './components/RouteGuard'
@@ -47,6 +47,13 @@ function RouteStateRedirect({ to }: { to: string }) {
 function App() {
   const navigate = useNavigate()
   const location = useLocation()
+  const settingsBackgroundRef = useRef<Location>({
+    pathname: '/home',
+    search: '',
+    hash: '',
+    state: null,
+    key: 'settings-fallback'
+  } as Location)
 
   const {
     setDbConnected,
@@ -70,7 +77,12 @@ function App() {
   const isChatHistoryWindow = location.pathname.startsWith('/chat-history/')
   const isStandaloneChatWindow = location.pathname === '/chat-window'
   const isNotificationWindow = location.pathname === '/notification-window'
-  const isExportRoute = location.pathname === '/export'
+  const isSettingsRoute = location.pathname === '/settings'
+  const settingsRouteState = location.state as { backgroundLocation?: Location; initialTab?: unknown } | null
+  const routeLocation = isSettingsRoute
+    ? settingsRouteState?.backgroundLocation ?? settingsBackgroundRef.current
+    : location
+  const isExportRoute = routeLocation.pathname === '/export'
   const [themeHydrated, setThemeHydrated] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
@@ -88,6 +100,12 @@ function App() {
 
   // 数据收集同意状态
   const [showAnalyticsConsent, setShowAnalyticsConsent] = useState(false)
+
+  useEffect(() => {
+    if (location.pathname !== '/settings') {
+      settingsBackgroundRef.current = location
+    }
+  }, [location])
 
   useEffect(() => {
     const root = document.documentElement
@@ -437,6 +455,25 @@ function App() {
   }
 
   // 主窗口 - 完整布局
+  const handleCloseSettings = () => {
+    const backgroundLocation = settingsRouteState?.backgroundLocation ?? settingsBackgroundRef.current
+    if (backgroundLocation.pathname === '/settings') {
+      navigate('/home', { replace: true })
+      return
+    }
+    navigate(
+      {
+        pathname: backgroundLocation.pathname,
+        search: backgroundLocation.search,
+        hash: backgroundLocation.hash
+      },
+      {
+        replace: true,
+        state: backgroundLocation.state
+      }
+    )
+  }
+
   return (
     <div className="app-container">
       <div className="window-drag-region" aria-hidden="true" />
@@ -568,7 +605,7 @@ function App() {
               <ExportPage />
             </div>
 
-            <Routes>
+            <Routes location={routeLocation}>
               <Route path="/" element={<HomePage />} />
               <Route path="/home" element={<HomePage />} />
               <Route path="/chat" element={<ChatPage />} />
@@ -584,7 +621,6 @@ function App() {
               <Route path="/dual-report" element={<DualReportPage />} />
               <Route path="/dual-report/view" element={<DualReportWindow />} />
 
-              <Route path="/settings" element={<SettingsPage />} />
               <Route path="/export" element={<div className="export-route-anchor" aria-hidden="true" />} />
               <Route path="/sns" element={<SnsPage />} />
               <Route path="/contacts" element={<ContactsPage />} />
@@ -593,6 +629,10 @@ function App() {
           </RouteGuard>
         </main>
       </div>
+
+      {isSettingsRoute && (
+        <SettingsPage onClose={handleCloseSettings} />
+      )}
     </div>
   )
 }
