@@ -169,14 +169,69 @@ export class KeyServiceMac {
     }
   }
 
+  private async getWeChatPid(): Promise<number> {
+    try {
+      const { stdout } = await execFileAsync('ps', ['-A', '-o', 'pid,comm,command'])
+      const lines = stdout.split('\n').slice(1)
+      
+      const candidates: Array<{ pid: number; comm: string; command: string }> = []
+      
+      for (const line of lines) {
+        const match = line.trim().match(/^(\d+)\s+(\S+)\s+(.*)$/)
+        if (!match) continue
+        
+        const pid = parseInt(match[1])
+        const comm = match[2]
+        const command = match[3]
+        
+        const nameMatch = comm === 'WeChat' || comm === '微信'
+        const pathMatch = command.includes('WeChat.app') || command.includes('/Contents/MacOS/WeChat')
+        
+        if (nameMatch && pathMatch) {
+          candidates.push({ pid, comm, command })
+        }
+      }
+      
+      if (candidates.length === 0) {
+        throw new Error('WeChat process not found')
+      }
+      
+      const filtered = candidates.filter(p => {
+        const cmd = p.command
+        return !cmd.includes('WeChatAppEx.app/') &&
+               !cmd.includes('/WeChatAppEx') &&
+               !cmd.includes(' WeChatAppEx') &&
+               !cmd.includes('crashpad_handler') &&
+               !cmd.includes('Helper')
+      })
+      
+      if (filtered.length === 0) {
+        throw new Error('No valid WeChat main process found')
+      }
+      
+      const preferredMain = filtered.filter(p => 
+        p.command.includes('/Contents/MacOS/WeChat')
+      )
+      
+      const selectedPool = preferredMain.length > 0 ? preferredMain : filtered
+      const selected = selectedPool.reduce((max, p) => p.pid > max.pid ? p : max)
+      
+      return selected.pid
+    } catch (e: any) {
+      throw new Error('Failed to get WeChat PID: ' + e.message)
+    }
+  }
+
   private async getDbKeyByHelper(
     timeoutMs: number,
     onStatus?: (message: string, level: number) => void
   ): Promise<string> {
     const helperPath = this.getHelperPath()
     const waitMs = Math.max(timeoutMs, 30_000)
+    const pid = await this.getWeChatPid()
+    
     return await new Promise<string>((resolve, reject) => {
-      const child = spawn(helperPath, [String(waitMs)], { stdio: ['ignore', 'pipe', 'pipe'] })
+      const child = spawn(helperPath, [String(pid), String(waitMs)], { stdio: ['ignore', 'pipe', 'pipe'] })
       let stdout = ''
       let stderr = ''
       let stdoutBuf = ''
