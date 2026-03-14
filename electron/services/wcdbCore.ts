@@ -595,6 +595,8 @@ export class WcdbCore {
         const resourcePaths = [
           dllDir,  // DLL 所在目录
           dirname(dllDir),  // 上级目录
+          process.resourcesPath,  // 打包后 Contents/Resources
+          process.resourcesPath ? join(process.resourcesPath as string, 'resources') : null,  // Contents/Resources/resources
           this.resourcesPath,  // 配置的资源路径
           join(process.cwd(), 'resources')  // 开发环境
         ].filter(Boolean)
