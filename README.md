@@ -110,6 +110,11 @@ npm run build
 
 打包产物在 `release` 目录下。
 
+> [!IMPORTANT]
+> 发布版打包已启用签名清单注入：`electron-builder` 的 `afterPack` 会读取 `WF_SIGN_PRIVATE_KEY`（Ed25519 私钥，支持 PEM 或 `PKCS8 DER Base64`）并生成 `resources/.wf_manifest.json` + `resources/.wf_manifest.sig`。  
+> GitHub Release Workflow 需要在 **Settings → Secrets and variables → Actions → Repository secrets** 配置 `WF_SIGN_PRIVATE_KEY`，否则构建会失败（不要填到 Environment secrets）。
+> 可使用 `node scripts/generate-signing-key.cjs` 生成密钥；脚本会同时输出可直接粘贴到 `wcdb/wcdb_api.cpp` 的公钥 XOR 数组。
+
 
 
 ## 致谢

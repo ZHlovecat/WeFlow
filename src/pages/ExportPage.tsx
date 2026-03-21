@@ -1026,7 +1026,7 @@ const toSessionRowsWithContacts = (
           kind: toKindByContact(contact),
           wechatId: contact.username,
           displayName: contact.displayName || session?.displayName || contact.username,
-          avatarUrl: contact.avatarUrl || session?.avatarUrl,
+          avatarUrl: session?.avatarUrl || contact.avatarUrl,
           hasSession: Boolean(session)
         } as SessionRow
       })
@@ -1046,7 +1046,7 @@ const toSessionRowsWithContacts = (
         kind: toKindByContactType(session, contact),
         wechatId: contact?.username || session.username,
         displayName: contact?.displayName || session.displayName || session.username,
-        avatarUrl: contact?.avatarUrl || session.avatarUrl,
+        avatarUrl: session.avatarUrl || contact?.avatarUrl,
         hasSession: true
       } as SessionRow
     })
@@ -5582,6 +5582,45 @@ function ExportPage() {
     return map
   }, [contactsList])
 
+  useEffect(() => {
+    if (!showSessionDetailPanel) return
+    const sessionId = String(sessionDetail?.wxid || '').trim()
+    if (!sessionId) return
+
+    const mappedSession = sessionRowByUsername.get(sessionId)
+    const mappedContact = contactByUsername.get(sessionId)
+    if (!mappedSession && !mappedContact) return
+
+    setSessionDetail((prev) => {
+      if (!prev || prev.wxid !== sessionId) return prev
+
+      const nextDisplayName = mappedSession?.displayName || mappedContact?.displayName || prev.displayName || sessionId
+      const nextRemark = mappedContact?.remark ?? prev.remark
+      const nextNickName = mappedContact?.nickname ?? prev.nickName
+      const nextAlias = mappedContact?.alias ?? prev.alias
+      const nextAvatarUrl = mappedSession?.avatarUrl || mappedContact?.avatarUrl || prev.avatarUrl
+
+      if (
+        nextDisplayName === prev.displayName &&
+        nextRemark === prev.remark &&
+        nextNickName === prev.nickName &&
+        nextAlias === prev.alias &&
+        nextAvatarUrl === prev.avatarUrl
+      ) {
+        return prev
+      }
+
+      return {
+        ...prev,
+        displayName: nextDisplayName,
+        remark: nextRemark,
+        nickName: nextNickName,
+        alias: nextAlias,
+        avatarUrl: nextAvatarUrl
+      }
+    })
+  }, [contactByUsername, sessionDetail?.wxid, sessionRowByUsername, showSessionDetailPanel])
+
   const currentSessionExportRecords = useMemo(() => {
     const sessionId = String(sessionDetail?.wxid || '').trim()
     if (!sessionId) return [] as configService.ExportSessionRecordEntry[]
@@ -5987,7 +6026,11 @@ function ExportPage() {
       loadSnsUserPostCounts({ force: true })
     ])
 
-    if (String(sessionDetail?.wxid || '').trim()) {
+    const currentDetailSessionId = showSessionDetailPanel
+      ? String(sessionDetail?.wxid || '').trim()
+      : ''
+    if (currentDetailSessionId) {
+      await loadSessionDetail(currentDetailSessionId)
       void loadSessionRelationStats({ forceRefresh: true })
     }
   }, [
@@ -5998,11 +6041,13 @@ function ExportPage() {
     filteredContacts,
     isSessionCountStageReady,
     loadContactsList,
+    loadSessionDetail,
     loadSessionRelationStats,
     loadSnsStats,
     loadSnsUserPostCounts,
     resetSessionMutualFriendsLoader,
     scheduleSessionMutualFriendsWorker,
+    showSessionDetailPanel,
     sessionDetail?.wxid
   ])
 

@@ -790,6 +790,16 @@ export interface ElectronAPI {
         }>
         likes: Array<string>
         comments: Array<{ id: string; nickname: string; content: string; refCommentId: string; refNickname?: string; emojis?: Array<{ url: string; md5: string; width: number; height: number; encryptUrl?: string; aesKey?: string }> }>
+        location?: {
+          latitude?: number
+          longitude?: number
+          city?: string
+          country?: string
+          poiName?: string
+          poiAddress?: string
+          poiAddressName?: string
+          label?: string
+        }
         rawXml?: string
       }>
       error?: string

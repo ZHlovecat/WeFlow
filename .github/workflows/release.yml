@@ -45,6 +45,8 @@ jobs:
       - name: Package and Publish macOS arm64 (unsigned DMG)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WF_SIGN_PRIVATE_KEY: ${{ secrets.WF_SIGN_PRIVATE_KEY }}
+          WF_SIGNING_REQUIRED: "1"
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: |
           npx electron-builder --mac dmg --arm64 --publish always
@@ -82,6 +84,8 @@ jobs:
       - name: Package and Publish Linux
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WF_SIGN_PRIVATE_KEY: ${{ secrets.WF_SIGN_PRIVATE_KEY }}
+          WF_SIGNING_REQUIRED: "1"
         run: |
           npx electron-builder --linux --publish always
 
@@ -118,6 +122,8 @@ jobs:
       - name: Package and Publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WF_SIGN_PRIVATE_KEY: ${{ secrets.WF_SIGN_PRIVATE_KEY }}
+          WF_SIGNING_REQUIRED: "1"
         run: |
           npx electron-builder --publish always
 
