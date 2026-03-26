@@ -304,7 +304,17 @@ export class WcdbCore {
   }
 
   private formatInitProtectionError(code: number): string {
-    return `错误码: ${code}`
+    const messages: Record<number, string> = {
+      '-3001': '未找到数据库目录 (db_storage)，请确认已选择正确的微信数据目录（应包含以 wxid_ 开头的子文件夹）',
+      '-3002': '未找到 session.db 文件，请确认微信已登录并且数据目录完整',
+      '-3003': '数据库句柄无效，请重试',
+      '-3004': '恢复数据库连接失败，请重试',
+      '-2301': '动态库加载失败，请检查安装是否完整',
+      '-2302': 'WCDB 初始化异常，请重试',
+      '-2303': 'WCDB 未能成功初始化',
+    }
+    const msg = messages[String(code) as keyof typeof messages]
+    return msg ? `${msg} (错误码: ${code})` : `操作失败，错误码: ${code}`
   }
 
   private isLogEnabled(): boolean {
@@ -480,6 +490,49 @@ export class WcdbCore {
         }
       } catch { }
     }
+    // 兜底：向上查找 db_storage（最多 2 级），处理用户选择了子目录的情况
+    try {
+      let parent = normalized
+      for (let i = 0; i < 2; i++) {
+        const up = join(parent, '..')
+        if (up === parent) break
+        parent = up
+        const candidateUp = join(parent, 'db_storage')
+        if (existsSync(candidateUp)) return candidateUp
+        if (wxid) {
+          const viaWxidUp = join(parent, wxid, 'db_storage')
+          if (existsSync(viaWxidUp)) return viaWxidUp
+        }
+      }
+    } catch { }
+    // 兜底：递归搜索 basePath 下的 db_storage 目录（最多 3 层深）
+    try {
+      const found = this.findDbStorageRecursive(normalized, 3)
+      if (found) return found
+    } catch { }
+    return null
+  }
+
+  private findDbStorageRecursive(dir: string, maxDepth: number): string | null {
+    if (maxDepth <= 0) return null
+    try {
+      const entries = readdirSync(dir)
+      for (const entry of entries) {
+        if (entry.toLowerCase() === 'db_storage') {
+          const candidate = join(dir, entry)
+          try { if (statSync(candidate).isDirectory()) return candidate } catch { }
+        }
+      }
+      for (const entry of entries) {
+        const entryPath = join(dir, entry)
+        try {
+          if (statSync(entryPath).isDirectory()) {
+            const found = this.findDbStorageRecursive(entryPath, maxDepth - 1)
+            if (found) return found
+          }
+        } catch { }
+      }
+    } catch { }
     return null
   }
 
