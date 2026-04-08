@@ -106,6 +106,9 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
   const [whisperModelStatus, setWhisperModelStatus] = useState<{ exists: boolean; modelPath?: string; tokensPath?: string } | null>(null)
 
   const [httpApiToken, setHttpApiToken] = useState('')
+  const [ossAccessKeyId, setOssAccessKeyId] = useState('')
+  const [ossAccessKeySecret, setOssAccessKeySecret] = useState('')
+  const [showOssSecret, setShowOssSecret] = useState(false)
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 B';
@@ -368,6 +371,11 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
 
       const savedApiHost = await configService.getHttpApiHost()
       if (savedApiHost) setHttpApiHost(savedApiHost)
+
+      const savedOssKeyId = await configService.getOssAccessKeyId()
+      if (savedOssKeyId) setOssAccessKeyId(savedOssKeyId)
+      const savedOssKeySecret = await configService.getOssAccessKeySecret()
+      if (savedOssKeySecret) setOssAccessKeySecret(savedOssKeySecret)
 
       setAuthEnabled(savedAuthEnabled)
       setAuthUseHello(savedAuthUseHello)
@@ -2569,6 +2577,50 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
           value={httpApiMediaExportPath || '未获取到目录'}
           readOnly
         />
+      </div>
+
+      <div className="divider" />
+
+      <div className="form-group">
+        <label>OSS 云存储</label>
+        <span className="form-hint">配置阿里云 OSS 密钥，用于上传图片等文件。密钥保存在本地，上传启用 AES256 服务端加密</span>
+      </div>
+
+      <div className="form-group">
+        <label>AccessKey ID</label>
+        <input
+          type="text"
+          className="field-input"
+          value={ossAccessKeyId}
+          placeholder="请输入 AccessKey ID"
+          onChange={(e) => {
+            const val = e.target.value.trim()
+            setOssAccessKeyId(val)
+            scheduleConfigSave('ossAccessKeyId', () => configService.setOssAccessKeyId(val))
+          }}
+          style={{ fontFamily: 'monospace' }}
+        />
+      </div>
+
+      <div className="form-group">
+        <label>AccessKey Secret</label>
+        <div className="input-with-toggle">
+          <input
+            type={showOssSecret ? 'text' : 'password'}
+            className="field-input"
+            value={ossAccessKeySecret}
+            placeholder="请输入 AccessKey Secret"
+            onChange={(e) => {
+              const val = e.target.value.trim()
+              setOssAccessKeySecret(val)
+              scheduleConfigSave('ossAccessKeySecret', () => configService.setOssAccessKeySecret(val))
+            }}
+            style={{ fontFamily: 'monospace' }}
+          />
+          <button type="button" className="toggle-visibility" onClick={() => setShowOssSecret(!showOssSecret)}>
+            {showOssSecret ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
       </div>
 
       <div className="divider" />
