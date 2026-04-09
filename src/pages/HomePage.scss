@@ -69,24 +69,27 @@
 }
 
 .hero-title {
-  font-size: 64px;
-  font-weight: 800;
-  margin: 0 0 16px;
-  color: var(--text-primary);
-  letter-spacing: -2px;
-  background: linear-gradient(135deg, var(--primary) 0%, rgba(var(--primary-rgb), 0.6) 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  &.ant-typography {
+    font-size: 64px;
+    font-weight: 800;
+    margin: 0 0 16px;
+    letter-spacing: -2px;
+    background: linear-gradient(135deg, var(--primary) 0%, rgba(var(--primary-rgb), 0.6) 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
 }
 
 .hero-subtitle {
-  font-size: 18px;
-  color: var(--text-secondary);
-  max-width: 520px;
-  margin: 0 auto;
-  line-height: 1.6;
-  opacity: 0.8;
+  &.ant-typography {
+    font-size: 18px;
+    max-width: 520px;
+    display: block;
+    margin: 0 auto;
+    line-height: 1.6;
+    opacity: 0.8;
+  }
 }
 
 @keyframes moveBlob {

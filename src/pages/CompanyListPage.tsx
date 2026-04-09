@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Building2, RefreshCw } from 'lucide-react'
 import {
-  Table, Button, Modal, Form, Input, Upload, Alert, Space, message,
+  Table, Button, Modal, Form, Input, Upload, Alert, Space, message, Flex, Typography,
 } from 'antd'
 import {
   PlusOutlined, EyeOutlined, UploadOutlined, LoadingOutlined,
-  EditOutlined,
+  EditOutlined, BankOutlined, ReloadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { uploadImageToOss } from '../utils/ossUpload'
@@ -358,13 +357,13 @@ function CompanyListPage() {
 
   return (
     <div className="company-list-page">
-      <div className="company-page-header">
-        <div className="company-page-title">
-          <Building2 size={24} />
-          <h2>企业列表</h2>
-        </div>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 20 }}>
+        <Flex align="center" gap={10}>
+          <BankOutlined style={{ fontSize: 22 }} />
+          <Typography.Title level={4} style={{ margin: 0 }}>企业列表</Typography.Title>
+        </Flex>
         <Space>
-          <span className="company-count">共 {total} 家企业</span>
+          <Typography.Text type="secondary">共 {total} 家企业</Typography.Text>
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -373,14 +372,14 @@ function CompanyListPage() {
             新增企业
           </Button>
           <Button
-            icon={<RefreshCw size={14} className={loading ? 'spinning' : ''} />}
+            icon={<ReloadOutlined spin={loading} />}
             onClick={() => fetchCompanies(currentPage)}
             disabled={loading}
           >
             刷新
           </Button>
         </Space>
-      </div>
+      </Flex>
 
       {error && (
         <Alert

@@ -2,39 +2,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  animation: shopFadeIn 0.3s ease-out;
 
-  .shop-page-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-    flex-shrink: 0;
-
-    .shop-page-title {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      color: var(--text-primary);
-
-      h2 {
-        font-size: 20px;
-        font-weight: 600;
-        margin: 0;
-      }
-    }
-
-    .shop-count {
-      font-size: 13px;
-      color: var(--text-secondary);
-    }
-  }
-
-  .spinning {
-    animation: spin 1s linear infinite;
-  }
-
-  // 图片网格
   .shop-img-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -48,7 +16,6 @@
   }
 }
 
-// 地图搜索候选列表
 .map-suggestion-list {
   position: absolute;
   top: 100%;
@@ -87,20 +54,4 @@
       margin-top: 2px;
     }
   }
-}
-
-@keyframes shopFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, RefreshCw, FolderClosed, Building2, Store, ChevronDown, Wrench, MapPin, Clock, UserCog, Tag, LogOut } from 'lucide-react'
+import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, RefreshCw, FolderClosed, Building2, Store, ChevronDown, Wrench, MapPin, Clock, UserCog, Tag, LogOut, Users, Shield, KeyRound } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
 import { useChatStore } from '../stores/chatStore'
 import { useAnalyticsStore } from '../stores/analyticsStore'
@@ -125,10 +125,58 @@ function Sidebar({ collapsed }: SidebarProps) {
   const accountCardWrapRef = useRef<HTMLDivElement | null>(null)
   const setLocked = useAppStore(state => state.setLocked)
   const setIsLoggedIn = useAppStore(state => state.setIsLoggedIn)
+  const clearAuth = useAppStore(state => state.clearAuth)
   const isDbConnected = useAppStore(state => state.isDbConnected)
   const isMacPlatform = useAppStore(state => state.isMacPlatform)
+  const allowedMenuIds = useAppStore(state => state.allowedMenuIds)
+  const authUsername = useAppStore(state => state.authUsername)
+  const authToken = useAppStore(state => state.authToken)
   const resetChatStore = useChatStore(state => state.reset)
   const clearAnalyticsStoreCache = useAnalyticsStore(state => state.clearCache)
+  const [sysMenuOpen, setSysMenuOpen] = useState(false)
+  const [showChangePwdDialog, setShowChangePwdDialog] = useState(false)
+  const [changePwdLoading, setChangePwdLoading] = useState(false)
+  const [oldPassword, setOldPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [changePwdError, setChangePwdError] = useState('')
+
+  const handleChangePassword = async () => {
+    if (!oldPassword.trim()) { setChangePwdError('请输入原密码'); return }
+    if (!newPassword.trim()) { setChangePwdError('请输入新密码'); return }
+    if (newPassword.length < 6) { setChangePwdError('新密码长度不能少于6位'); return }
+    if (newPassword !== confirmPassword) { setChangePwdError('两次输入的新密码不一致'); return }
+    setChangePwdError('')
+    setChangePwdLoading(true)
+    try {
+      const form = new URLSearchParams()
+      form.append('password', oldPassword)
+      form.append('newPassword', newPassword)
+      const res = await fetch('https://store.quikms.com/admin/auth/changePassword', {
+        method: 'POST',
+        headers: { 'manage-store-token': authToken || '' },
+        body: form,
+      })
+      const json = await res.json()
+      if (json.errno === 0) {
+        setShowChangePwdDialog(false)
+        setOldPassword('')
+        setNewPassword('')
+        setConfirmPassword('')
+        window.alert('密码修改成功，请重新登录')
+        clearAuth()
+        setIsLoggedIn(false)
+      } else {
+        setChangePwdError(json.errmsg || '修改失败')
+      }
+    } catch {
+      setChangePwdError('请求失败，请稍后重试')
+    } finally {
+      setChangePwdLoading(false)
+    }
+  }
+
+  const hasMenu = (ids: number[]) => ids.length === 0 || ids.some(id => allowedMenuIds.includes(id))
 
   useEffect(() => {
     window.electronAPI.auth.verifyEnabled().then(setAuthEnabled)
@@ -424,7 +472,20 @@ function Sidebar({ collapsed }: SidebarProps) {
             <span className="nav-label">通讯录</span>
           </NavLink>
 
+          {/* 人力仓 */}
+          {hasMenu([102]) && (
+          <NavLink
+            to="/store"
+            className={`nav-item ${isActive('/store') ? 'active' : ''}`}
+            title={collapsed ? '人力仓' : undefined}
+          >
+            <span className="nav-icon"><Users size={20} /></span>
+            <span className="nav-label">人力仓</span>
+          </NavLink>
+          )}
+
           {/* 企业列表 */}
+          {hasMenu([103]) && (
           <NavLink
             to="/company"
             className={`nav-item ${isActive('/company') ? 'active' : ''}`}
@@ -433,8 +494,10 @@ function Sidebar({ collapsed }: SidebarProps) {
             <span className="nav-icon"><Building2 size={20} /></span>
             <span className="nav-label">企业列表</span>
           </NavLink>
+          )}
 
           {/* 门店列表 */}
+          {hasMenu([104]) && (
           <NavLink
             to="/shop"
             className={`nav-item ${isActive('/shop') ? 'active' : ''}`}
@@ -443,8 +506,10 @@ function Sidebar({ collapsed }: SidebarProps) {
             <span className="nav-icon"><Store size={20} /></span>
             <span className="nav-label">门店列表</span>
           </NavLink>
+          )}
 
           {/* 店长列表 */}
+          {hasMenu([105]) && (
           <NavLink
             to="/manager"
             className={`nav-item ${isActive('/manager') ? 'active' : ''}`}
@@ -453,8 +518,10 @@ function Sidebar({ collapsed }: SidebarProps) {
             <span className="nav-icon"><UserCog size={20} /></span>
             <span className="nav-label">店长列表</span>
           </NavLink>
+          )}
 
-          {/* 系统配置维护（一级可展开） */}
+          {/* 系统配置维护 */}
+          {hasMenu([106]) && (
           <div className={`nav-group ${isActive('/city') || isActive('/time') || isActive('/tag-dict') ? 'has-active' : ''}`}>
             <div
               className={`nav-item nav-group-title ${configMenuOpen ? 'open' : ''}`}
@@ -496,10 +563,64 @@ function Sidebar({ collapsed }: SidebarProps) {
               </div>
             )}
           </div>
+          )}
+
+          {/* 系统管理 */}
+          {hasMenu([107]) && (
+          <div className={`nav-group ${isActive('/account') || isActive('/role') ? 'has-active' : ''}`}>
+            <div
+              className={`nav-item nav-group-title ${sysMenuOpen ? 'open' : ''}`}
+              onClick={() => setSysMenuOpen(!sysMenuOpen)}
+              title={collapsed ? '系统管理' : undefined}
+            >
+              <span className="nav-icon"><Shield size={20} /></span>
+              <span className="nav-label">系统管理</span>
+              <span className="nav-group-arrow">
+                <ChevronDown size={14} className={sysMenuOpen ? 'arrow-open' : 'arrow-closed'} />
+              </span>
+            </div>
+            {sysMenuOpen && (
+              <div className="nav-group-children">
+                <NavLink
+                  to="/account"
+                  className={`nav-item nav-child ${isActive('/account') ? 'active' : ''}`}
+                  title={collapsed ? '账号管理' : undefined}
+                >
+                  <span className="nav-icon"><UserCog size={18} /></span>
+                  <span className="nav-label">账号管理</span>
+                </NavLink>
+                <NavLink
+                  to="/role"
+                  className={`nav-item nav-child ${isActive('/role') ? 'active' : ''}`}
+                  title={collapsed ? '角色管理' : undefined}
+                >
+                  <span className="nav-icon"><Shield size={18} /></span>
+                  <span className="nav-label">角色管理</span>
+                </NavLink>
+              </div>
+            )}
+          </div>
+          )}
 
         </nav>
 
         <div className="sidebar-footer">
+          {authUsername && (
+            <div className="sidebar-admin-info">
+              <div className="admin-account">
+                <UserRound size={14} />
+                <span className="admin-name" title={authUsername}>{authUsername}</span>
+              </div>
+              <button
+                className="admin-change-pwd-btn"
+                onClick={() => { setShowChangePwdDialog(true); setChangePwdError(''); setOldPassword(''); setNewPassword(''); setConfirmPassword('') }}
+                type="button"
+              >
+                <KeyRound size={13} />
+                <span>修改密码</span>
+              </button>
+            </div>
+          )}
           <div className="sidebar-user-card-wrap" ref={accountCardWrapRef}>
             <div className={`sidebar-user-menu ${isAccountMenuOpen ? 'open' : ''}`} role="menu" aria-label="账号菜单">
               <button
@@ -522,8 +643,10 @@ function Sidebar({ collapsed }: SidebarProps) {
               </button>
               <button
                 className="sidebar-user-menu-item danger"
-                onClick={() => {
+                onClick={async () => {
                   setIsAccountMenuOpen(false)
+                  try { await fetch('https://store.quikms.com/admin/auth/logout') } catch { /* ignore */ }
+                  clearAuth()
                   setIsLoggedIn(false)
                 }}
                 type="button"
@@ -562,6 +685,55 @@ function Sidebar({ collapsed }: SidebarProps) {
           </div>
         </div>
       </aside>
+
+      {showChangePwdDialog && (
+        <div className="sidebar-dialog-overlay" onClick={() => !changePwdLoading && setShowChangePwdDialog(false)}>
+          <div className="sidebar-dialog" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <h3>修改密码</h3>
+            <p>当前账号：{authUsername}</p>
+            <div className="change-pwd-form">
+              <div className="change-pwd-field">
+                <label>原密码</label>
+                <input
+                  type="password"
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  placeholder="请输入原密码"
+                  disabled={changePwdLoading}
+                />
+              </div>
+              <div className="change-pwd-field">
+                <label>新密码</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="请输入新密码（至少6位）"
+                  disabled={changePwdLoading}
+                />
+              </div>
+              <div className="change-pwd-field">
+                <label>确认新密码</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="再次输入新密码"
+                  disabled={changePwdLoading}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleChangePassword() }}
+                />
+              </div>
+              {changePwdError && <div className="change-pwd-error">{changePwdError}</div>}
+            </div>
+            <div className="sidebar-dialog-actions">
+              <button type="button" onClick={() => setShowChangePwdDialog(false)} disabled={changePwdLoading}>取消</button>
+              <button type="button" className="primary" onClick={handleChangePassword} disabled={changePwdLoading}>
+                {changePwdLoading ? '提交中...' : '确认修改'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showSwitchAccountDialog && (
         <div className="sidebar-dialog-overlay" onClick={() => !isSwitchingAccount && setShowSwitchAccountDialog(false)}>

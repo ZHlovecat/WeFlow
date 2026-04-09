@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Tag as TagIcon, RefreshCw } from 'lucide-react'
 import {
-  Table, Button, Modal, Form, Input, InputNumber, Alert, Space, message, Popconfirm, Tag,
+  Table, Button, Modal, Form, Input, InputNumber, Alert, Space, message, Popconfirm, Tag, Flex, Typography,
 } from 'antd'
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined, TagsOutlined, ReloadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import './TagDictPage.scss'
@@ -325,25 +324,25 @@ function TagDictPage() {
 
   return (
     <div className="tag-dict-page">
-      <div className="tag-page-header">
-        <div className="tag-page-title">
-          <TagIcon size={24} />
-          <h2>标签字典</h2>
-        </div>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 20 }}>
+        <Flex align="center" gap={10}>
+          <TagsOutlined style={{ fontSize: 22 }} />
+          <Typography.Title level={4} style={{ margin: 0 }}>标签字典</Typography.Title>
+        </Flex>
         <Space>
-          <span className="tag-count">共 {tags.length} 个一级标签</span>
+          <Typography.Text type="secondary">共 {tags.length} 个一级标签</Typography.Text>
           <Button type="primary" icon={<PlusOutlined />} onClick={openAdd1}>
             新增标签
           </Button>
           <Button
-            icon={<RefreshCw size={14} className={loading ? 'spinning' : ''} />}
+            icon={<ReloadOutlined spin={loading} />}
             onClick={() => fetchTags()}
             disabled={loading}
           >
             刷新
           </Button>
         </Space>
-      </div>
+      </Flex>
 
       {error && (
         <Alert type="error" message={error} closable onClose={() => setError('')} style={{ marginBottom: 16 }} />

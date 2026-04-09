@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import { MapPin, RefreshCw } from 'lucide-react'
 import {
-  Table, Button, Modal, Form, Input, InputNumber, Alert, Space, message, Popconfirm,
+  Table, Button, Modal, Form, Input, InputNumber, Alert, Space, message, Popconfirm, Flex, Typography,
 } from 'antd'
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined, EnvironmentOutlined, ReloadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import './CityListPage.scss'
@@ -363,25 +362,25 @@ function CityListPage() {
 
   return (
     <div className="city-list-page">
-      <div className="city-page-header">
-        <div className="city-page-title">
-          <MapPin size={24} />
-          <h2>商圈列表</h2>
-        </div>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 20 }}>
+        <Flex align="center" gap={10}>
+          <EnvironmentOutlined style={{ fontSize: 22 }} />
+          <Typography.Title level={4} style={{ margin: 0 }}>商圈列表</Typography.Title>
+        </Flex>
         <Space>
-          <span className="city-count">共 {total} 个商圈区域</span>
+          <Typography.Text type="secondary">共 {total} 个商圈区域</Typography.Text>
           <Button type="primary" icon={<PlusOutlined />} onClick={openAdd1}>
             新增区域
           </Button>
           <Button
-            icon={<RefreshCw size={14} className={loading ? 'spinning' : ''} />}
+            icon={<ReloadOutlined spin={loading} />}
             onClick={() => fetchCities(currentPage)}
             disabled={loading}
           >
             刷新
           </Button>
         </Space>
-      </div>
+      </Flex>
 
       {error && (
         <Alert type="error" message={error} closable onClose={() => setError('')} style={{ marginBottom: 16 }} />

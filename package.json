@@ -15,7 +15,7 @@
   "scripts": {
     "postinstall": "electron-builder install-app-deps",
     "rebuild": "electron-rebuild",
-    "dev": "vite",
+    "dev": "chcp 65001 >nul && vite",
     "typecheck": "tsc --noEmit",
     "build": "tsc && vite build && electron-builder",
     "preview": "vite preview",

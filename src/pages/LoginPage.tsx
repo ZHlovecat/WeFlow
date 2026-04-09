@@ -1,30 +1,92 @@
 import { useState } from 'react'
-import { Button, Input, Form, message, Typography, Space } from 'antd'
+import { useNavigate } from 'react-router-dom'
+import { Button, Input, Form, Modal, Typography, Space } from 'antd'
 import { UserOutlined, LockOutlined, LoginOutlined, PoweroffOutlined } from '@ant-design/icons'
 import { useAppStore } from '../stores/appStore'
 
-const HARDCODED_USERNAME = 'admin'
-const HARDCODED_PASSWORD = 'admin123'
+const API_BASE = 'https://store.quikms.com'
 
 export default function LoginPage() {
+  const navigate = useNavigate()
   const setIsLoggedIn = useAppStore(state => state.setIsLoggedIn)
+  const setAuth = useAppStore(state => state.setAuth)
+  const setAllowedMenuIds = useAppStore(state => state.setAllowedMenuIds)
   const [isLogging, setIsLogging] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
 
-  const handleSubmit = (values: { username: string; password: string }) => {
-    setIsLogging(true)
+  const collectTreeIds = (nodes: any[]): number[] => {
+    const ids: number[] = []
+    for (const n of nodes) {
+      ids.push(n.id)
+      if (n.children?.length) ids.push(...collectTreeIds(n.children))
+    }
+    return ids
+  }
 
-    setTimeout(() => {
-      if (values.username === HARDCODED_USERNAME && values.password === HARDCODED_PASSWORD) {
+  const fetchUserPermissions = async (token: string, userId: number, username: string) => {
+    try {
+      const [adminRes, roleRes, treeRes] = await Promise.all([
+        fetch(`${API_BASE}/admin/admin/list?page=1&size=200`),
+        fetch(`${API_BASE}/admin/role/list?page=1&size=200`),
+        fetch(`${API_BASE}/admin/menu/tree`),
+      ])
+      const adminJson = await adminRes.json()
+      const roleJson = await roleRes.json()
+      const treeJson = await treeRes.json()
+
+      const roles = roleJson.data?.data || []
+      const admins = adminJson.data?.data || []
+      const allTreeIds = collectTreeIds(treeJson.data || [])
+
+      const currentAdmin = admins.find((a: any) => a.id === userId || a.username === username)
+      if (currentAdmin?.role_type) {
+        const role = roles.find((r: any) => r.id === currentAdmin.role_type)
+        if (role) {
+          if (role.roleCode === 'ROLE_ALL') {
+            setAllowedMenuIds(allTreeIds)
+          } else if (role.roles) {
+            const ids = role.roles.split(',').filter(Boolean).map(Number)
+            setAllowedMenuIds(ids)
+          }
+          return
+        }
+      }
+
+      // 内置管理员或未找到角色 → 授予全部权限
+      setAllowedMenuIds(allTreeIds)
+    } catch (e) {
+      console.error('获取权限失败:', e)
+    }
+  }
+
+  const handleSubmit = async (values: { username: string; password: string }) => {
+    setIsLogging(true)
+    try {
+      const form = new URLSearchParams()
+      form.append('username', values.username)
+      form.append('password', values.password)
+      const res = await fetch(`${API_BASE}/admin/auth/login`, {
+        method: 'POST',
+        body: form,
+      })
+      const json = await res.json()
+      if (json.errno === 0 && json.data?.access_token) {
+        const { access_token, user_id, username } = json.data
+        setAuth(access_token, username, user_id)
+        await fetchUserPermissions(access_token, user_id, username)
         setIsSuccess(true)
         setTimeout(() => {
+          navigate('/home', { replace: true })
           setIsLoggedIn(true)
         }, 600)
       } else {
-        message.error('账号或密码错误')
+        Modal.error({ title: '登录失败', content: json.errmsg || '账号或密码错误，请重试', zIndex: 10001 })
         setIsLogging(false)
       }
-    }, 300)
+    } catch {
+      Modal.error({ title: '登录失败', content: '网络请求失败，请检查网络连接', zIndex: 10001 })
+      setIsLogging(false)
+    }
   }
 
   const handleQuit = () => {
@@ -80,53 +142,21 @@ export default function LoginPage() {
           </Typography.Text>
         </div>
 
-        <Form
-          onFinish={handleSubmit}
-          size="large"
-          autoComplete="off"
-        >
-          <Form.Item
-            name="username"
-            rules={[{ required: true, message: '请输入账号' }]}
-          >
-            <Input
-              prefix={<UserOutlined style={{ color: '#bfbfbf' }} />}
-              placeholder="请输入账号"
-              disabled={isLogging}
-              autoFocus
-            />
+        <Form onFinish={handleSubmit} size="large" autoComplete="off">
+          <Form.Item name="username" rules={[{ required: true, message: '请输入账号' }]}>
+            <Input prefix={<UserOutlined style={{ color: '#bfbfbf' }} />} placeholder="请输入账号" disabled={isLogging} autoFocus />
           </Form.Item>
-
-          <Form.Item
-            name="password"
-            rules={[{ required: true, message: '请输入密码' }]}
-          >
-            <Input.Password
-              prefix={<LockOutlined style={{ color: '#bfbfbf' }} />}
-              placeholder="请输入密码"
-              disabled={isLogging}
-            />
+          <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
+            <Input.Password prefix={<LockOutlined style={{ color: '#bfbfbf' }} />} placeholder="请输入密码" disabled={isLogging} />
           </Form.Item>
-
           <Form.Item style={{ marginBottom: 12 }}>
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
-              <Button
-                type="primary"
-                htmlType="submit"
-                block
-                loading={isLogging}
-                icon={<LoginOutlined />}
-                style={{ height: 44, borderRadius: 8, fontWeight: 500 }}
-              >
+              <Button type="primary" htmlType="submit" block loading={isLogging} icon={<LoginOutlined />}
+                style={{ height: 44, borderRadius: 8, fontWeight: 500 }}>
                 登录
               </Button>
-              <Button
-                block
-                danger
-                icon={<PoweroffOutlined />}
-                onClick={handleQuit}
-                style={{ height: 44, borderRadius: 8, fontWeight: 500 }}
-              >
+              <Button block danger icon={<PoweroffOutlined />} onClick={handleQuit}
+                style={{ height: 44, borderRadius: 8, fontWeight: 500 }}>
                 退出软件
               </Button>
             </Space>

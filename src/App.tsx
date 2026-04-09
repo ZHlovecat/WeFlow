@@ -32,6 +32,9 @@ import CityListPage from './pages/CityListPage'
 import TimeListPage from './pages/TimeListPage'
 import TagDictPage from './pages/TagDictPage'
 import ManagerListPage from './pages/ManagerListPage'
+import StoreListPage from './pages/StoreListPage'
+import AccountListPage from './pages/AccountListPage'
+import RoleListPage from './pages/RoleListPage'
 
 import { useAppStore } from './stores/appStore'
 import { themes, useThemeStore, type ThemeId, type ThemeMode } from './stores/themeStore'
@@ -771,6 +774,9 @@ function App() {
               <Route path="/city" element={<CityListPage />} />
               <Route path="/time" element={<TimeListPage />} />
               <Route path="/tag-dict" element={<TagDictPage />} />
+              <Route path="/store" element={<StoreListPage />} />
+              <Route path="/account" element={<AccountListPage />} />
+              <Route path="/role" element={<RoleListPage />} />
               <Route path="/chat-history/:sessionId/:messageId" element={<ChatHistoryPage />} />
               <Route path="/chat-history-inline/:payloadId" element={<ChatHistoryPage />} />
             </Routes>

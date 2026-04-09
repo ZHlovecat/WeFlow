@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { UserCog, RefreshCw } from 'lucide-react'
 import {
   Table, Button, Modal, Form, Input, Select,
-  Alert, Space, message, Popconfirm, Tag, Avatar,
+  Alert, Space, message, Popconfirm, Tag, Avatar, Flex, Typography,
 } from 'antd'
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, UserOutlined,
+  UserSwitchOutlined, ReloadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import './ManagerListPage.scss'
@@ -310,11 +310,11 @@ function ManagerListPage() {
 
   return (
     <div className="manager-list-page">
-      <div className="manager-page-header">
-        <div className="manager-page-title">
-          <UserCog size={24} />
-          <h2>店长列表</h2>
-        </div>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 20 }}>
+        <Flex align="center" gap={10}>
+          <UserSwitchOutlined style={{ fontSize: 22 }} />
+          <Typography.Title level={4} style={{ margin: 0 }}>店长列表</Typography.Title>
+        </Flex>
         <Space>
           <Select
             placeholder="请选择门店查看"
@@ -329,7 +329,7 @@ function ManagerListPage() {
               <Select.Option key={s.id} value={s.id}>{s.name}</Select.Option>
             ))}
           </Select>
-          <span className="manager-count">共 {total} 名店长</span>
+          <Typography.Text type="secondary">共 {total} 名店长</Typography.Text>
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -339,14 +339,14 @@ function ManagerListPage() {
             新增店长
           </Button>
           <Button
-            icon={<RefreshCw size={14} className={loading ? 'spinning' : ''} />}
+            icon={<ReloadOutlined spin={loading} />}
             onClick={() => filterShopId && fetchManagers(filterShopId, currentPage)}
             disabled={loading || !filterShopId}
           >
             刷新
           </Button>
         </Space>
-      </div>
+      </Flex>
 
       {error && (
         <Alert type="error" message={error} closable onClose={() => setError('')} style={{ marginBottom: 16 }} />
@@ -354,7 +354,7 @@ function ManagerListPage() {
 
       {!filterShopId ? (
         <div style={{ textAlign: 'center', padding: '80px 0', color: 'var(--text-tertiary)' }}>
-          <UserCog size={48} style={{ opacity: 0.3, marginBottom: 16 }} />
+          <UserSwitchOutlined style={{ fontSize: 48, opacity: 0.3, marginBottom: 16, display: 'block' }} />
           <p>请先选择门店以查看店长列表</p>
         </div>
       ) : (

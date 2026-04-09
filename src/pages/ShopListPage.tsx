@@ -1,13 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Store, RefreshCw } from 'lucide-react'
 import {
   Table, Button, Modal, Form, Input, InputNumber, Select, Cascader,
-  Alert, Space, message, Popconfirm, Tag, Upload, Image,
+  Alert, Space, message, Popconfirm, Tag, Upload, Image, Flex, Typography,
 } from 'antd'
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, UploadOutlined,
   LoadingOutlined, PictureOutlined, GiftOutlined, ClockCircleOutlined,
-  EnvironmentOutlined,
+  EnvironmentOutlined, ShopOutlined, ReloadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { uploadImageToOss } from '../utils/ossUpload'
@@ -743,25 +742,25 @@ function ShopListPage() {
 
   return (
     <div className="shop-list-page">
-      <div className="shop-page-header">
-        <div className="shop-page-title">
-          <Store size={24} />
-          <h2>门店列表</h2>
-        </div>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 20 }}>
+        <Flex align="center" gap={10}>
+          <ShopOutlined style={{ fontSize: 22 }} />
+          <Typography.Title level={4} style={{ margin: 0 }}>门店列表</Typography.Title>
+        </Flex>
         <Space>
-          <span className="shop-count">共 {total} 家门店</span>
+          <Typography.Text type="secondary">共 {total} 家门店</Typography.Text>
           <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
             新增门店
           </Button>
           <Button
-            icon={<RefreshCw size={14} className={loading ? 'spinning' : ''} />}
+            icon={<ReloadOutlined spin={loading} />}
             onClick={() => fetchShops(currentPage)}
             disabled={loading}
           >
             刷新
           </Button>
         </Space>
-      </div>
+      </Flex>
 
       {error && (
         <Alert type="error" message={error} closable onClose={() => setError('')} style={{ marginBottom: 16 }} />
