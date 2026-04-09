@@ -5,6 +5,8 @@ import { UserOutlined, LockOutlined, LoginOutlined, PoweroffOutlined } from '@an
 import { useAppStore } from '../stores/appStore'
 import { adminFetch, API_BASE } from '../utils/adminFetch'
 
+const isMac = navigator.userAgent.toLowerCase().includes('mac')
+
 export default function LoginPage() {
   const navigate = useNavigate()
   const setIsLoggedIn = useAppStore(state => state.setIsLoggedIn)
@@ -108,7 +110,7 @@ export default function LoginPage() {
       justifyContent: 'center',
       background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
       zIndex: 9999,
-      ...({ WebkitAppRegion: 'drag' } as any),
+      ...(isMac ? {} : { WebkitAppRegion: 'drag' } as any),
       opacity: isSuccess ? 0 : 1,
       transition: 'opacity 0.5s ease',
     }}>
@@ -118,7 +120,7 @@ export default function LoginPage() {
         background: '#fff',
         borderRadius: 12,
         boxShadow: '0 8px 40px rgba(0, 0, 0, 0.12)',
-        ...({ WebkitAppRegion: 'no-drag' } as any),
+        ...(isMac ? {} : { WebkitAppRegion: 'no-drag' } as any),
         animation: 'loginCardFadeIn 0.5s ease',
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>

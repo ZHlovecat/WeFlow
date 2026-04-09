@@ -649,11 +649,9 @@ const isYearsLoadCanceled = (taskId: string): boolean => {
   return task?.canceled === true
 }
 
-const setupCustomTitleBarWindow = (win: BrowserWindow): void => {
-  if (process.platform === 'darwin') {
-    win.setWindowButtonVisibility(false)
-  }
+const isMac = process.platform === 'darwin'
 
+const setupCustomTitleBarWindow = (win: BrowserWindow): void => {
   const emitMaximizeState = () => {
     if (win.isDestroyed()) return
     win.webContents.send('window:maximizeStateChanged', win.isMaximized() || win.isFullScreen())
@@ -707,11 +705,13 @@ function createWindow(options: { autoShow?: boolean } = {}) {
       nodeIntegration: false,
       webSecurity: false // Allow loading local files (video playback)
     },
-    titleBarStyle: 'hidden',
-    titleBarOverlay: false,
+    ...(isMac ? {} : {
+      titleBarStyle: 'hidden' as const,
+      titleBarOverlay: false,
+    }),
     show: false
   })
-  setupCustomTitleBarWindow(win)
+  if (!isMac) setupCustomTitleBarWindow(win)
 
   // 窗口准备好后显示
   // Splash 模式下不在这里 show，由启动流程统一控制
@@ -819,7 +819,7 @@ function createWindow(options: { autoShow?: boolean } = {}) {
     mainWindowReady = false
     isClosePromptVisible = false
 
-    if (process.platform !== 'darwin' && !isAppQuitting) {
+    if (!isAppQuitting && !isMac) {
       destroyNotificationWindow()
       if (BrowserWindow.getAllWindows().length === 0) {
         app.quit()
@@ -860,12 +860,14 @@ function createAgreementWindow() {
       contextIsolation: true,
       nodeIntegration: false
     },
-    titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#00000000',
-      symbolColor: isDark ? '#FFFFFF' : '#333333',
-      height: 32
-    },
+    ...(isMac ? {} : {
+      titleBarStyle: 'hidden' as const,
+      titleBarOverlay: {
+        color: '#00000000',
+        symbolColor: isDark ? '#FFFFFF' : '#333333',
+        height: 32
+      },
+    }),
     show: false,
     backgroundColor: isDark ? '#1A1A1A' : '#FFFFFF'
   })
@@ -1073,12 +1075,14 @@ function createVideoPlayerWindow(videoPath: string, videoWidth?: number, videoHe
       nodeIntegration: false,
       webSecurity: false
     },
-    titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#1a1a1a',
-      symbolColor: '#ffffff',
-      height: 40
-    },
+    ...(isMac ? {} : {
+      titleBarStyle: 'hidden' as const,
+      titleBarOverlay: {
+        color: '#1a1a1a',
+        symbolColor: '#ffffff',
+        height: 40
+      },
+    }),
     show: false,
     backgroundColor: '#000000',
     autoHideMenuBar: true
@@ -1202,13 +1206,15 @@ function createChatHistoryRouteWindow(route: string) {
       contextIsolation: true,
       nodeIntegration: false
     },
-    titleBarStyle: 'hidden',
-    titleBarOverlay: false,
+    ...(isMac ? {} : {
+      titleBarStyle: 'hidden' as const,
+      titleBarOverlay: false,
+    }),
     show: false,
     backgroundColor: isDark ? '#1A1A1A' : '#F0F0F0',
     autoHideMenuBar: true
   })
-  setupCustomTitleBarWindow(win)
+  if (!isMac) setupCustomTitleBarWindow(win)
 
   win.once('ready-to-show', () => {
     win.show()
@@ -1278,12 +1284,14 @@ function createSessionChatWindow(sessionId: string, options?: OpenSessionChatWin
       contextIsolation: true,
       nodeIntegration: false
     },
-    titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#00000000',
-      symbolColor: isDark ? '#ffffff' : '#1a1a1a',
-      height: 40
-    },
+    ...(isMac ? {} : {
+      titleBarStyle: 'hidden' as const,
+      titleBarOverlay: {
+        color: '#00000000',
+        symbolColor: isDark ? '#ffffff' : '#1a1a1a',
+        height: 40
+      },
+    }),
     show: false,
     backgroundColor: isDark ? '#1A1A1A' : '#F0F0F0',
     autoHideMenuBar: true
@@ -3608,24 +3616,22 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', async () => {
   isAppQuitting = true
-  // 销毁 tray 图标
   if (tray) { try { tray.destroy() } catch {} tray = null }
-  // 通知窗使用 hide 而非 close，退出时主动销毁，避免残留窗口阻塞进程退出。
   destroyNotificationWindow()
-  // 兜底：5秒后强制退出，防止某个异步任务卡住导致进程残留
   const forceExitTimer = setTimeout(() => {
     console.warn('[App] Force exit after timeout')
     app.exit(0)
-  }, 5000)
+  }, isMac ? 3000 : 5000)
   forceExitTimer.unref()
-  // 停止 HTTP 服务器，释放 TCP 端口占用，避免进程无法退出
   try { await httpService.stop() } catch {}
-  // 终止 wcdb Worker 线程，避免线程阻止进程退出
   try { await wcdbService.shutdown() } catch {}
+  if (isMac) {
+    try { app.exit(0) } catch {}
+  }
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  if (!isMac || isAppQuitting) {
     app.quit()
   }
 })

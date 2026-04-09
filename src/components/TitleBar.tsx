@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Copy, Minus, PanelLeftClose, PanelLeftOpen, Square, X } from 'lucide-react'
 import './TitleBar.scss'
 
+const isMac = navigator.userAgent.toLowerCase().includes('mac')
+
 interface TitleBarProps {
   title?: string
   sidebarCollapsed?: boolean
@@ -22,7 +24,7 @@ function TitleBar({
   const [isMaximized, setIsMaximized] = useState(false)
 
   useEffect(() => {
-    if (!showWindowControls) return
+    if (!showWindowControls || isMac) return
 
     void window.electronAPI.window.isMaximized().then(setIsMaximized).catch(() => {
       setIsMaximized(false)
@@ -34,7 +36,7 @@ function TitleBar({
   }, [showWindowControls])
 
   return (
-    <div className="title-bar">
+    <div className={`title-bar${isMac ? ' title-bar-mac' : ''}`}>
       <div className="title-brand">
         {showLogo && <img src="./logo.png" alt="WeFlow" className="title-logo" />}
         <span className="titles">{title || 'WeFlow'}</span>
@@ -51,7 +53,7 @@ function TitleBar({
         ) : null}
       </div>
       {customControls}
-      {showWindowControls ? (
+      {showWindowControls && !isMac ? (
         <div className="title-window-controls">
           <button
             type="button"

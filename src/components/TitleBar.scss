@@ -12,6 +12,11 @@
   gap: 8px;
   position: relative;
   z-index: 2101;
+
+  &.title-bar-mac {
+    -webkit-app-region: no-drag;
+    height: 36px;
+  }
 }
 
 // 繁花如梦：标题栏毛玻璃

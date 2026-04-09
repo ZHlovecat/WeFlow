@@ -6,6 +6,7 @@ import Store from 'electron-store'
 // 加密前缀标记
 const SAFE_PREFIX = 'safe:'  // safeStorage 加密（普通模式）
 const isSafeStorageAvailable = (): boolean => {
+  if (process.platform === 'darwin') return false
   try {
     return typeof safeStorage?.isEncryptionAvailable === 'function' && safeStorage.isEncryptionAvailable()
   } catch {
