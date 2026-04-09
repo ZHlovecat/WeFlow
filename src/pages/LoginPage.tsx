@@ -109,7 +109,7 @@ export default function LoginPage() {
       justifyContent: 'center',
       background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
       zIndex: 9999,
-      WebkitAppRegion: 'drag' as any,
+      ...({ WebkitAppRegion: 'drag' } as any),
       opacity: isSuccess ? 0 : 1,
       transition: 'opacity 0.5s ease',
     }}>
@@ -119,7 +119,7 @@ export default function LoginPage() {
         background: '#fff',
         borderRadius: 12,
         boxShadow: '0 8px 40px rgba(0, 0, 0, 0.12)',
-        WebkitAppRegion: 'no-drag' as any,
+        ...({ WebkitAppRegion: 'no-drag' } as any),
         animation: 'loginCardFadeIn 0.5s ease',
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>

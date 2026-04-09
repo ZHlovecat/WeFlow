@@ -520,6 +520,7 @@ function StoreListPage() {
               <Descriptions.Item label="创建时间" span={2}>{detailRecord.create_time || '-'}</Descriptions.Item>
               <Descriptions.Item label="备注" span={2}>{detailRecord.remark || '-'}</Descriptions.Item>
             </Descriptions>
+            {/* @ts-ignore orientation type mismatch in antd */}
             <Divider orientation="left" style={{ fontSize: 14 }}>标签信息</Divider>
             {detailRecord.tags.map(cat => (
               <div key={cat.category} style={{ marginBottom: 12 }}>
