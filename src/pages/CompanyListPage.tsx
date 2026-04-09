@@ -31,7 +31,7 @@ interface CompanyListResponse {
   }
 }
 
-const API_BASE = 'https://store.quikms.com'
+import { adminFetch, API_BASE } from '../utils/adminFetch'
 
 function CompanyListPage() {
   const [companies, setCompanies] = useState<CompanyItem[]>([])
@@ -62,7 +62,7 @@ function CompanyListPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API_BASE}/admin/company/list?page=${page}&size=${actualSize}`)
+      const res = await adminFetch(`${API_BASE}/admin/company/list?page=${page}&size=${actualSize}`)
       const json: CompanyListResponse = await res.json()
       if (json.errno === 0) {
         setCompanies(json.data.data || [])
@@ -119,7 +119,7 @@ function CompanyListPage() {
         return
       }
       setAddLoading(true)
-      const res = await fetch(`${API_BASE}/admin/company/put`, {
+      const res = await adminFetch(`${API_BASE}/admin/company/put`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -187,7 +187,7 @@ function CompanyListPage() {
     try {
       const values = await editForm.validateFields()
       setEditLoading(true)
-      const res = await fetch(`${API_BASE}/admin/company/put`, {
+      const res = await adminFetch(`${API_BASE}/admin/company/put`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

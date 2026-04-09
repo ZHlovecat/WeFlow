@@ -8,7 +8,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import './TagDictPage.scss'
 
-const API_BASE = 'https://store.quikms.com'
+import { adminFetch, API_BASE } from '../utils/adminFetch'
 
 interface TagItem {
   id: number
@@ -43,7 +43,7 @@ function TagDictPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API_BASE}/admin/tag/list`)
+      const res = await adminFetch(`${API_BASE}/admin/tag/list`)
       const json = await res.json()
       if (json.errno === 0) {
         setTags(json.data || [])
@@ -60,7 +60,7 @@ function TagDictPage() {
   const fetchChildren = useCallback(async (parentId: number) => {
     setChildLoading(parentId)
     try {
-      const res = await fetch(`${API_BASE}/admin/tag/item?parent_id=${parentId}`)
+      const res = await adminFetch(`${API_BASE}/admin/tag/item?parent_id=${parentId}`)
       const json = await res.json()
       if (json.errno === 0) {
         setChildrenMap((prev) => ({
@@ -116,7 +116,7 @@ function TagDictPage() {
       }
       if (editRecord1) body.id = editRecord1.id
 
-      const res = await fetch(`${API_BASE}/admin/tag/put`, {
+      const res = await adminFetch(`${API_BASE}/admin/tag/put`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -167,7 +167,7 @@ function TagDictPage() {
       }
       if (editRecord2) body.id = editRecord2.id
 
-      const res = await fetch(`${API_BASE}/admin/tag/put`, {
+      const res = await adminFetch(`${API_BASE}/admin/tag/put`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -191,7 +191,7 @@ function TagDictPage() {
 
   const handleDelete1 = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/tag/delete?id=${id}`)
+      const res = await adminFetch(`${API_BASE}/admin/tag/delete?id=${id}`)
       const json = await res.json()
       if (json.errno === 0) {
         message.success('删除成功')
@@ -212,7 +212,7 @@ function TagDictPage() {
 
   const handleDelete2 = async (id: number, parentId: number) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/tag/delete?id=${id}`)
+      const res = await adminFetch(`${API_BASE}/admin/tag/delete?id=${id}`)
       const json = await res.json()
       if (json.errno === 0) {
         message.success('删除成功')

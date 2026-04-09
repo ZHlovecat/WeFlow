@@ -8,7 +8,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import './TimeListPage.scss'
 
-const API_BASE = 'https://store.quikms.com'
+import { adminFetch, API_BASE } from '../utils/adminFetch'
 
 interface TimeItem {
   id: number
@@ -44,7 +44,7 @@ function TimeListPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API_BASE}/admin/time/list`)
+      const res = await adminFetch(`${API_BASE}/admin/time/list`)
       const json: TimeListResponse = await res.json()
       if (json.errno === 0) {
         setTimes(json.data || [])
@@ -91,7 +91,7 @@ function TimeListPage() {
       }
       if (editRecord) body.id = editRecord.id
 
-      const res = await fetch(`${API_BASE}/admin/time/put`, {
+      const res = await adminFetch(`${API_BASE}/admin/time/put`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -115,7 +115,7 @@ function TimeListPage() {
 
   const handleDelete = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/time/delete?id=${id}`)
+      const res = await adminFetch(`${API_BASE}/admin/time/delete?id=${id}`)
       const json = await res.json()
       if (json.errno === 0) {
         message.success('删除成功')

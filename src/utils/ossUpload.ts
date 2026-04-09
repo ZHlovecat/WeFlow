@@ -1,4 +1,4 @@
-const API_BASE = 'https://store.quikms.com'
+import { adminFetch, API_BASE } from './adminFetch'
 
 interface OssSignatureResponse {
   errno: number
@@ -14,7 +14,7 @@ interface OssSignatureResponse {
 }
 
 async function getOssSignature(type: 'company' | 'shop'): Promise<OssSignatureResponse['data']> {
-  const res = await fetch(`${API_BASE}/admin/auth/getOssSignature?type=${type}`)
+  const res = await adminFetch(`${API_BASE}/admin/auth/getOssSignature?type=${type}`)
   const json: OssSignatureResponse = await res.json()
   if (json.errno !== 0) {
     throw new Error(json.errmsg || '获取 OSS 签名失败')

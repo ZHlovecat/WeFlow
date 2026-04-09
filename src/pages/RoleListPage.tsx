@@ -8,7 +8,7 @@ import {
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 
-const API_BASE = 'https://store.quikms.com'
+import { adminFetch, API_BASE } from '../utils/adminFetch'
 
 interface RoleItem {
   id: number
@@ -70,7 +70,7 @@ function RoleListPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API_BASE}/admin/role/list?page=1&size=200`)
+      const res = await adminFetch(`${API_BASE}/admin/role/list?page=1&size=200`)
       const json = await res.json()
       if (json.errno === 0) {
         setRoles(json.data.data || [])
@@ -86,7 +86,7 @@ function RoleListPage() {
 
   const fetchMenuTree = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/menu/tree`)
+      const res = await adminFetch(`${API_BASE}/admin/menu/tree`)
       const json = await res.json()
       if (json.errno === 0) {
         setMenuTree(toAntTreeData(json.data || []))
@@ -103,7 +103,7 @@ function RoleListPage() {
     try {
       const values = await addForm.validateFields()
       setAddLoading(true)
-      const res = await fetch(`${API_BASE}/admin/role/put`, {
+      const res = await adminFetch(`${API_BASE}/admin/role/put`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -128,7 +128,7 @@ function RoleListPage() {
 
   const handleDeleteRole = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/role/del?id=${id}`)
+      const res = await adminFetch(`${API_BASE}/admin/role/del?id=${id}`)
       const json = await res.json()
       if (json.errno === 0) {
         message.success('删除成功')
@@ -154,7 +154,7 @@ function RoleListPage() {
       const form = new URLSearchParams()
       form.append('roleId', String(permRole.id))
       form.append('roles', permCheckedKeys.join(','))
-      const res = await fetch(`${API_BASE}/admin/role/add`, { method: 'POST', body: form })
+      const res = await adminFetch(`${API_BASE}/admin/role/add`, { method: 'POST', body: form })
       const json = await res.json()
       if (json.errno === 0) {
         message.success('权限保存成功')

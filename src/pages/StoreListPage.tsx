@@ -9,8 +9,7 @@ import {
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import './StoreListPage.scss'
-
-const API_BASE = 'https://store.quikms.com'
+import { adminFetch, API_BASE } from '../utils/adminFetch'
 
 interface TagLabel {
   id: number
@@ -107,7 +106,7 @@ function StoreListPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API_BASE}/admin/store/list?page=${page}&size=${actualSize}`)
+      const res = await adminFetch(`${API_BASE}/admin/store/list?page=${page}&size=${actualSize}`)
       const json: PageResponse = await res.json()
       if (json.errno === 0) {
         setStores(json.data.data || [])
@@ -126,9 +125,9 @@ function StoreListPage() {
   const loadDropdownData = useCallback(async () => {
     try {
       const [companyRes, shopRes, tagRes] = await Promise.all([
-        fetch(`${API_BASE}/admin/company/list?page=1&size=200`),
-        fetch(`${API_BASE}/admin/shop/list?page=1&size=200`),
-        fetch(`${API_BASE}/admin/tag/list`),
+        adminFetch(`${API_BASE}/admin/company/list?page=1&size=200`),
+        adminFetch(`${API_BASE}/admin/shop/list?page=1&size=200`),
+        adminFetch(`${API_BASE}/admin/tag/list`),
       ])
       const companyJson = await companyRes.json()
       if (companyJson.errno === 0) {
@@ -142,7 +141,7 @@ function StoreListPage() {
       if (tagJson.errno === 0) {
         const categories: TagDictCategory[] = []
         for (const cat of tagJson.data || []) {
-          const childRes = await fetch(`${API_BASE}/admin/tag/item?parent_id=${cat.id}`)
+          const childRes = await adminFetch(`${API_BASE}/admin/tag/item?parent_id=${cat.id}`)
           const childJson = await childRes.json()
           categories.push({
             id: cat.id,
@@ -185,7 +184,7 @@ function StoreListPage() {
     try {
       const values = await editForm.validateFields()
       setEditLoading(true)
-      const res = await fetch(`${API_BASE}/admin/store/update`, {
+      const res = await adminFetch(`${API_BASE}/admin/store/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -232,7 +231,7 @@ function StoreListPage() {
   const handleAddTag = async (storeId: number, tagId: number) => {
     setTagLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/admin/store/addTag`, {
+      const res = await adminFetch(`${API_BASE}/admin/store/addTag`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: storeId, tag_id: tagId }),
@@ -254,7 +253,7 @@ function StoreListPage() {
   const handleDeleteTag = async (storeId: number, tagId: number) => {
     setTagLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/admin/store/deleteTag?id=${storeId}&tag_id=${tagId}`)
+      const res = await adminFetch(`${API_BASE}/admin/store/deleteTag?id=${storeId}&tag_id=${tagId}`)
       const json = await res.json()
       if (json.errno === 0) {
         message.success('标签删除成功')
@@ -270,7 +269,7 @@ function StoreListPage() {
   }
 
   const refreshTagRecord = async (storeId: number) => {
-    const res = await fetch(`${API_BASE}/admin/store/list?page=1&size=200`)
+    const res = await adminFetch(`${API_BASE}/admin/store/list?page=1&size=200`)
     const json = await res.json()
     if (json.errno === 0) {
       const updated = (json.data.data || []).find((s: StoreItem) => s.id === storeId)

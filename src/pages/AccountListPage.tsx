@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 
-const API_BASE = 'https://store.quikms.com'
+import { adminFetch, API_BASE } from '../utils/adminFetch'
 
 interface AdminItem {
   id: number
@@ -47,7 +47,7 @@ function AccountListPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API_BASE}/admin/admin/list?page=${page}&size=${size || pageSize}`)
+      const res = await adminFetch(`${API_BASE}/admin/admin/list?page=${page}&size=${size || pageSize}`)
       const json = await res.json()
       if (json.errno === 0) {
         setAdmins(json.data.data || [])
@@ -65,7 +65,7 @@ function AccountListPage() {
 
   const fetchRoles = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/role/list?page=1&size=200`)
+      const res = await adminFetch(`${API_BASE}/admin/role/list?page=1&size=200`)
       const json = await res.json()
       if (json.errno === 0) setRoles(json.data.data || [])
     } catch { /* ignore */ }
@@ -83,7 +83,7 @@ function AccountListPage() {
       const form = new URLSearchParams()
       form.append('username', values.username.trim())
       if (values.role_type) form.append('role_type', String(values.role_type))
-      const res = await fetch(`${API_BASE}/admin/admin/put`, { method: 'POST', body: form })
+      const res = await adminFetch(`${API_BASE}/admin/admin/put`, { method: 'POST', body: form })
       const json = await res.json()
       if (json.errno === 0) {
         message.success('添加成功，默认密码为 123456')
@@ -100,7 +100,7 @@ function AccountListPage() {
 
   const handleResetPassword = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/admin/resetPassword?id=${id}`)
+      const res = await adminFetch(`${API_BASE}/admin/admin/resetPassword?id=${id}`)
       const json = await res.json()
       if (json.errno === 0) {
         message.success('密码已重置为 123456')
@@ -114,7 +114,7 @@ function AccountListPage() {
 
   const handleDelete = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/admin/delete?id=${id}`)
+      const res = await adminFetch(`${API_BASE}/admin/admin/delete?id=${id}`)
       const json = await res.json()
       if (json.errno === 0) {
         message.success('删除成功')

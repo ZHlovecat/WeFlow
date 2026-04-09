@@ -10,7 +10,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import './ManagerListPage.scss'
 
-const API_BASE = 'https://store.quikms.com'
+import { adminFetch, API_BASE } from '../utils/adminFetch'
 
 interface ManagerItem {
   id: number
@@ -64,7 +64,7 @@ function ManagerListPage() {
 
   const fetchShops = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/shop/list?page=1&size=200`)
+      const res = await adminFetch(`${API_BASE}/admin/shop/list?page=1&size=200`)
       const json = await res.json()
       if (json.errno === 0) {
         setShops((json.data.data || []).filter((s: any) => s.name))
@@ -82,7 +82,7 @@ function ManagerListPage() {
     setError('')
     try {
       const url = `${API_BASE}/admin/shop/managerList?page=${page}&size=${actualSize}&shop_id=${shopId}`
-      const res = await fetch(url)
+      const res = await adminFetch(url)
       const json: PageResponse<ManagerItem> = await res.json()
       if (json.errno === 0) {
         // 附加门店名称
@@ -120,7 +120,7 @@ function ManagerListPage() {
     if (!shopId) return
     setLoading(true)
     const url = `${API_BASE}/admin/shop/managerList?page=1&size=${pageSize}&shop_id=${shopId}`
-    fetch(url)
+    adminFetch(url)
       .then((res) => res.json())
       .then((json: PageResponse<ManagerItem>) => {
         if (json.errno === 0) {
@@ -174,7 +174,7 @@ function ManagerListPage() {
       }
       if (editRecord) body.id = editRecord.id
 
-      const res = await fetch(`${API_BASE}/admin/shop/managerPut`, {
+      const res = await adminFetch(`${API_BASE}/admin/shop/managerPut`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -200,7 +200,7 @@ function ManagerListPage() {
 
   const handleDelete = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/manager/del?id=${id}`)
+      const res = await adminFetch(`${API_BASE}/admin/manager/del?id=${id}`)
       const json = await res.json()
       if (json.errno === 0) {
         message.success('删除成功')

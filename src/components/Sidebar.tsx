@@ -8,6 +8,7 @@ import * as configService from '../services/config'
 import { onExportSessionStatus, requestExportSessionStatus } from '../services/exportBridge'
 import { UserRound } from 'lucide-react'
 
+import { adminFetch } from '../utils/adminFetch'
 import './Sidebar.scss'
 
 interface SidebarUserProfile {
@@ -152,9 +153,8 @@ function Sidebar({ collapsed }: SidebarProps) {
       const form = new URLSearchParams()
       form.append('password', oldPassword)
       form.append('newPassword', newPassword)
-      const res = await fetch('https://store.quikms.com/admin/auth/changePassword', {
+      const res = await adminFetch('https://store.quikms.com/admin/auth/changePassword', {
         method: 'POST',
-        headers: { 'manage-store-token': authToken || '' },
         body: form,
       })
       const json = await res.json()
@@ -645,7 +645,7 @@ function Sidebar({ collapsed }: SidebarProps) {
                 className="sidebar-user-menu-item danger"
                 onClick={async () => {
                   setIsAccountMenuOpen(false)
-                  try { await fetch('https://store.quikms.com/admin/auth/logout') } catch { /* ignore */ }
+                  try { await adminFetch('https://store.quikms.com/admin/auth/logout') } catch { /* ignore */ }
                   clearAuth()
                   setIsLoggedIn(false)
                 }}

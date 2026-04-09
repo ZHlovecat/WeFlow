@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button, Input, Form, Modal, Typography, Space } from 'antd'
 import { UserOutlined, LockOutlined, LoginOutlined, PoweroffOutlined } from '@ant-design/icons'
 import { useAppStore } from '../stores/appStore'
-
-const API_BASE = 'https://store.quikms.com'
+import { adminFetch, API_BASE } from '../utils/adminFetch'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -26,9 +25,9 @@ export default function LoginPage() {
   const fetchUserPermissions = async (token: string, userId: number, username: string) => {
     try {
       const [adminRes, roleRes, treeRes] = await Promise.all([
-        fetch(`${API_BASE}/admin/admin/list?page=1&size=200`),
-        fetch(`${API_BASE}/admin/role/list?page=1&size=200`),
-        fetch(`${API_BASE}/admin/menu/tree`),
+        adminFetch(`${API_BASE}/admin/admin/list?page=1&size=200`),
+        adminFetch(`${API_BASE}/admin/role/list?page=1&size=200`),
+        adminFetch(`${API_BASE}/admin/menu/tree`),
       ])
       const adminJson = await adminRes.json()
       const roleJson = await roleRes.json()

@@ -12,7 +12,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { uploadImageToOss } from '../utils/ossUpload'
 import './ShopListPage.scss'
 
-const API_BASE = 'https://store.quikms.com'
+import { adminFetch, API_BASE } from '../utils/adminFetch'
 const TENCENT_MAP_KEY = 'MMTBZ-FFMCL-SY6PC-E5SVR-BNGDH-7VFLU'
 
 // ---- JSONP 工具 ----
@@ -199,7 +199,7 @@ function ShopListPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API_BASE}/admin/shop/list?page=${page}&size=${actualSize}`)
+      const res = await adminFetch(`${API_BASE}/admin/shop/list?page=${page}&size=${actualSize}`)
       const json: PageResponse<ShopItem> = await res.json()
       if (json.errno === 0) {
         setShops(json.data.data || [])
@@ -218,9 +218,9 @@ function ShopListPage() {
   const loadDropdownData = useCallback(async () => {
     try {
       const [companyRes, cascaderRes, timeRes] = await Promise.all([
-        fetch(`${API_BASE}/admin/company/list?page=1&size=200`),
-        fetch(`${API_BASE}/admin/city/cascader`),
-        fetch(`${API_BASE}/admin/time/list`),
+        adminFetch(`${API_BASE}/admin/company/list?page=1&size=200`),
+        adminFetch(`${API_BASE}/admin/city/cascader`),
+        adminFetch(`${API_BASE}/admin/time/list`),
       ])
       const companyJson = await companyRes.json()
       if (companyJson.errno === 0) {
@@ -283,7 +283,7 @@ function ShopListPage() {
       }
       if (editRecord) body.id = editRecord.id
 
-      const res = await fetch(`${API_BASE}/admin/shop/put`, {
+      const res = await adminFetch(`${API_BASE}/admin/shop/put`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -472,7 +472,7 @@ function ShopListPage() {
     setShowImg(true)
     setImgLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/admin/shop/imgList?shop_id=${shopId}`)
+      const res = await adminFetch(`${API_BASE}/admin/shop/imgList?shop_id=${shopId}`)
       const json = await res.json()
       if (json.errno === 0) {
         setImgList(json.data || [])
@@ -496,7 +496,7 @@ function ShopListPage() {
     setImgUploading(true)
     try {
       const url = await uploadImageToOss(file, 'shop')
-      await fetch(`${API_BASE}/admin/shop/imgPut`, {
+      await adminFetch(`${API_BASE}/admin/shop/imgPut`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shop_id: imgShopId, url }),
@@ -512,7 +512,7 @@ function ShopListPage() {
 
   const handleImgDelete = async (imgId: number) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/shop/imgDel?id=${imgId}`)
+      const res = await adminFetch(`${API_BASE}/admin/shop/imgDel?id=${imgId}`)
       const json = await res.json()
       if (json.errno === 0) {
         message.success('删除成功')
@@ -532,7 +532,7 @@ function ShopListPage() {
     setShowBenefits(true)
     setBenefitLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/admin/benefits/list?shop_id=${shopId}`)
+      const res = await adminFetch(`${API_BASE}/admin/benefits/list?shop_id=${shopId}`)
       const json = await res.json()
       if (json.errno === 0) {
         setBenefits(json.data || [])
@@ -548,7 +548,7 @@ function ShopListPage() {
     try {
       const values = await benefitForm.validateFields()
       setBenefitLoading(true)
-      const res = await fetch(`${API_BASE}/admin/benefits/put`, {
+      const res = await adminFetch(`${API_BASE}/admin/benefits/put`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -575,7 +575,7 @@ function ShopListPage() {
 
   const handleDeleteBenefit = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/benefits/del?id=${id}`)
+      const res = await adminFetch(`${API_BASE}/admin/benefits/del?id=${id}`)
       const json = await res.json()
       if (json.errno === 0) {
         message.success('删除成功')
@@ -595,7 +595,7 @@ function ShopListPage() {
     setTimeConfigLoading(true)
     setShowTimeConfig(true)
     try {
-      const res = await fetch(`${API_BASE}/admin/time/shopTime?shop_id=${shopId}`)
+      const res = await adminFetch(`${API_BASE}/admin/time/shopTime?shop_id=${shopId}`)
       const json = await res.json()
       if (json.errno === 0) {
         const selected = (json.data || [])
@@ -613,7 +613,7 @@ function ShopListPage() {
   const handleSaveTimeConfig = async () => {
     setTimeConfigLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/admin/shop/put`, {
+      const res = await adminFetch(`${API_BASE}/admin/shop/put`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -8,7 +8,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import './CityListPage.scss'
 
-const API_BASE = 'https://store.quikms.com'
+import { adminFetch, API_BASE } from '../utils/adminFetch'
 
 // ---- 1级商圈 ----
 interface CityItem {
@@ -74,7 +74,7 @@ function CityListPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API_BASE}/admin/city/list?page=${page}&size=${actualSize}`)
+      const res = await adminFetch(`${API_BASE}/admin/city/list?page=${page}&size=${actualSize}`)
       const json: CityListResponse = await res.json()
       if (json.errno === 0) {
         setCities(json.data.data || [])
@@ -93,7 +93,7 @@ function CityListPage() {
   const fetchChildren = useCallback(async (parentId: number) => {
     setChildLoading(parentId)
     try {
-      const res = await fetch(`${API_BASE}/admin/city/cascader`)
+      const res = await adminFetch(`${API_BASE}/admin/city/cascader`)
       const json: CascaderResponse = await res.json()
       if (json.errno === 0) {
         const parent = json.data.find((item) => item.id === parentId)
@@ -151,7 +151,7 @@ function CityListPage() {
       }
       if (editRecord1) body.id = editRecord1.id
 
-      const res = await fetch(`${API_BASE}/admin/city/put`, {
+      const res = await adminFetch(`${API_BASE}/admin/city/put`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -203,7 +203,7 @@ function CityListPage() {
       }
       if (editRecord2) body.id = editRecord2.id
 
-      const res = await fetch(`${API_BASE}/admin/city/itemPut`, {
+      const res = await adminFetch(`${API_BASE}/admin/city/itemPut`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -227,7 +227,7 @@ function CityListPage() {
 
   const handleDelete = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/city/delete?id=${id}`)
+      const res = await adminFetch(`${API_BASE}/admin/city/delete?id=${id}`)
       const json = await res.json()
       if (json.errno === 0) {
         message.success('删除成功')
