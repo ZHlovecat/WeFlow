@@ -5,7 +5,7 @@ import {
 } from 'antd'
 import {
   EditOutlined, ReloadOutlined, TagsOutlined,
-  TeamOutlined, EyeOutlined,
+  TeamOutlined, EyeOutlined, SearchOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import './StoreListPage.scss'
@@ -101,6 +101,11 @@ function StoreListPage() {
   // 详情弹窗
   const [detailRecord, setDetailRecord] = useState<StoreItem | null>(null)
 
+  // 搜索
+  const [searchName, setSearchName] = useState('')
+  const [isSearchMode, setIsSearchMode] = useState(false)
+  const [searchLoading, setSearchLoading] = useState(false)
+
   const fetchStores = useCallback(async (page: number = 1, size?: number) => {
     const actualSize = size || pageSize
     setLoading(true)
@@ -160,6 +165,47 @@ function StoreListPage() {
     fetchStores(1)
     loadDropdownData()
   }, [fetchStores, loadDropdownData])
+
+  const handleSearch = async (value: string) => {
+    const keyword = value.trim()
+    if (!keyword) {
+      setIsSearchMode(false)
+      fetchStores(1)
+      return
+    }
+    setSearchLoading(true)
+    setIsSearchMode(true)
+    setError('')
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/store/search?name=${encodeURIComponent(keyword)}`)
+      const json = await res.json()
+      if (json.errno === 0) {
+        const results: StoreItem[] = (json.data || []).map((item: any) => ({
+          id: item.id,
+          name: item.name || '',
+          gender: item.gender || '',
+          weixin: item.weixin || '',
+          age: '', edu: '', postion_name: '', work_year: '',
+          remark: '', friend_status: '', create_time: '',
+          company_id: null, shop_id: null, tags: [],
+        }))
+        setStores(results)
+        setTotal(results.length)
+      } else {
+        setError(json.errmsg || '搜索失败')
+      }
+    } catch (e: any) {
+      setError(e.message || '搜索请求失败')
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
+  const handleClearSearch = () => {
+    setSearchName('')
+    setIsSearchMode(false)
+    fetchStores(1)
+  }
 
   // ---- 编辑 ----
 
@@ -454,10 +500,23 @@ function StoreListPage() {
           <Typography.Title level={4} style={{ margin: 0 }}>人力仓</Typography.Title>
         </Flex>
         <Space>
-          <Typography.Text type="secondary">共 {total} 条记录</Typography.Text>
+          <Input.Search
+            placeholder="输入姓名搜索"
+            allowClear
+            value={searchName}
+            onChange={e => setSearchName(e.target.value)}
+            onSearch={handleSearch}
+            onClear={handleClearSearch}
+            loading={searchLoading}
+            enterButton={<><SearchOutlined /> 搜索</>}
+            style={{ width: 260 }}
+          />
+          <Typography.Text type="secondary">
+            {isSearchMode ? `搜索到 ${total} 条` : `共 ${total} 条记录`}
+          </Typography.Text>
           <Button
             icon={<ReloadOutlined spin={loading} />}
-            onClick={() => fetchStores(currentPage)}
+            onClick={() => { handleClearSearch() }}
             disabled={loading}
           >
             刷新
@@ -473,9 +532,9 @@ function StoreListPage() {
         columns={columns}
         dataSource={stores}
         rowKey="id"
-        loading={loading}
+        loading={loading || searchLoading}
         scroll={{ x: 1800 }}
-        pagination={{
+        pagination={isSearchMode ? false : {
           current: currentPage,
           total,
           pageSize,
