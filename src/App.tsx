@@ -33,6 +33,7 @@ import TimeListPage from './pages/TimeListPage'
 import TagDictPage from './pages/TagDictPage'
 import ManagerListPage from './pages/ManagerListPage'
 import StoreListPage from './pages/StoreListPage'
+import InterviewListPage from './pages/InterviewListPage'
 import AccountListPage from './pages/AccountListPage'
 import RoleListPage from './pages/RoleListPage'
 
@@ -775,6 +776,7 @@ function App() {
               <Route path="/time" element={<TimeListPage />} />
               <Route path="/tag-dict" element={<TagDictPage />} />
               <Route path="/store" element={<StoreListPage />} />
+              <Route path="/interview" element={<InterviewListPage />} />
               <Route path="/account" element={<AccountListPage />} />
               <Route path="/role" element={<RoleListPage />} />
               <Route path="/chat-history/:sessionId/:messageId" element={<ChatHistoryPage />} />

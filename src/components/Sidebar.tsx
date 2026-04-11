@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, RefreshCw, FolderClosed, Building2, Store, ChevronDown, Wrench, MapPin, Clock, UserCog, Tag, LogOut, Users, Shield, KeyRound } from 'lucide-react'
+import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, RefreshCw, FolderClosed, Building2, Store, ChevronDown, Wrench, MapPin, Clock, UserCog, Tag, LogOut, Users, Shield, KeyRound, CalendarCheck } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
 import { useChatStore } from '../stores/chatStore'
 import { useAnalyticsStore } from '../stores/analyticsStore'
@@ -481,6 +481,18 @@ function Sidebar({ collapsed }: SidebarProps) {
           >
             <span className="nav-icon"><Users size={20} /></span>
             <span className="nav-label">人力仓</span>
+          </NavLink>
+          )}
+
+          {/* 面试预约 */}
+          {hasMenu([113]) && (
+          <NavLink
+            to="/interview"
+            className={`nav-item ${isActive('/interview') ? 'active' : ''}`}
+            title={collapsed ? '面试预约' : undefined}
+          >
+            <span className="nav-icon"><CalendarCheck size={20} /></span>
+            <span className="nav-label">面试预约</span>
           </NavLink>
           )}
 
