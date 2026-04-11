@@ -1,115 +1,113 @@
 .home-page {
   height: 100%;
-  background: var(--bg-primary);
+  overflow: auto;
+}
+
+.home-loading {
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  position: relative;
 }
 
-.home-bg-blobs {
-  position: absolute;
-  top: 0;
-  left: 0;
+.home-dashboard {
+  padding: 24px;
+}
+
+.dashboard-header {
+  margin-bottom: 24px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  border-radius: 10px;
+  transition: transform 0.2s, box-shadow 0.2s;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  }
+
+  .ant-statistic-title {
+    font-size: 13px;
+    color: #8c8c8c;
+  }
+
+  .ant-statistic-content {
+    font-size: 28px;
+    font-weight: 700;
+  }
+
+  .ant-statistic-content-prefix {
+    margin-right: 8px;
+    font-size: 22px;
+  }
+
+  &.stat-card-talent .ant-statistic-content-prefix,
+  &.stat-card-talent .ant-statistic-content-value { color: #4096ff; }
+
+  &.stat-card-company .ant-statistic-content-prefix,
+  &.stat-card-company .ant-statistic-content-value { color: #52c41a; }
+
+  &.stat-card-shop .ant-statistic-content-prefix,
+  &.stat-card-shop .ant-statistic-content-value { color: #722ed1; }
+
+  &.stat-card-interview .ant-statistic-content-prefix,
+  &.stat-card-interview .ant-statistic-content-value { color: #faad14; }
+
+  &.stat-card-admin .ant-statistic-content-prefix,
+  &.stat-card-admin .ant-statistic-content-value { color: #13c2c2; }
+
+  &.stat-card-tag .ant-statistic-content-prefix,
+  &.stat-card-tag .ant-statistic-content-value { color: #ff4d4f; }
+}
+
+.chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.chart-card {
+  border-radius: 10px;
+
+  .ant-card-head {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .ant-card-head-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+}
+
+.chart-container {
   width: 100%;
-  height: 100%;
-  filter: blur(80px);
-  z-index: 0;
-  opacity: 0.6;
-  pointer-events: none;
+  height: 280px;
 }
 
-.blob {
-  position: absolute;
-  border-radius: 50%;
-  animation: moveBlob 20s infinite alternate ease-in-out;
-}
-
-.blob-1 {
-  width: 400px;
-  height: 400px;
-  background: rgba(var(--primary-rgb), 0.25);
-  top: -100px;
-  left: -50px;
-  animation-duration: 25s;
-}
-
-.blob-2 {
-  width: 350px;
-  height: 350px;
-  background: rgba(var(--primary-rgb), 0.15);
-  bottom: -50px;
-  right: -50px;
-  animation-duration: 30s;
-  animation-delay: -5s;
-}
-
-.blob-3 {
-  width: 300px;
-  height: 300px;
-  background: rgba(255, 255, 255, 0.1);
-  top: 40%;
-  left: 30%;
-  animation-duration: 22s;
-  animation-delay: -10s;
-}
-
-[data-mode="dark"] .blob-3 {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.home-content {
-  z-index: 1;
-  animation: fadeScaleUp 1s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.hero {
-  text-align: center;
-}
-
-.hero-title {
-  &.ant-typography {
-    font-size: 64px;
-    font-weight: 800;
-    margin: 0 0 16px;
-    letter-spacing: -2px;
-    background: linear-gradient(135deg, var(--primary) 0%, rgba(var(--primary-rgb), 0.6) 100%);
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+@media (max-width: 1200px) {
+  .stat-cards {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
-.hero-subtitle {
-  &.ant-typography {
-    font-size: 18px;
-    max-width: 520px;
-    display: block;
-    margin: 0 auto;
-    line-height: 1.6;
-    opacity: 0.8;
-  }
-}
-
-@keyframes moveBlob {
-  from {
-    transform: translate(0, 0) scale(1);
+@media (max-width: 900px) {
+  .stat-cards {
+    grid-template-columns: repeat(2, 1fr);
   }
 
-  to {
-    transform: translate(100px, 50px) scale(1.1);
-  }
-}
-
-@keyframes fadeScaleUp {
-  from {
-    opacity: 0;
-    transform: scale(0.95) translateY(20px);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
+  .chart-row {
+    grid-template-columns: 1fr;
   }
 }
