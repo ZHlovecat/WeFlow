@@ -3620,13 +3620,19 @@ app.on('before-quit', async () => {
   destroyNotificationWindow()
   const forceExitTimer = setTimeout(() => {
     console.warn('[App] Force exit after timeout')
-    app.exit(0)
+    if (isMac) {
+      // macOS: process.kill(SIGKILL) 跳过 C++ 析构器，避免原生模块析构崩溃
+      try { process.kill(process.pid, 'SIGKILL') } catch { app.exit(0) }
+    } else {
+      app.exit(0)
+    }
   }, isMac ? 3000 : 5000)
   forceExitTimer.unref()
   try { await httpService.stop() } catch {}
   try { await wcdbService.shutdown() } catch {}
   if (isMac) {
-    try { app.exit(0) } catch {}
+    // macOS: 清理完成后用 SIGKILL 立即终止，不走 exit() 避免析构器崩溃
+    try { process.kill(process.pid, 'SIGKILL') } catch { /* fallback: let quit proceed */ }
   }
 })
 
