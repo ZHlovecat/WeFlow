@@ -37,6 +37,27 @@
       padding: 10px;
       gap: 0;
     }
+
+    .sidebar-admin-info {
+      flex-direction: column;
+      align-items: center;
+      padding: 0;
+      gap: 4px;
+
+      .admin-account {
+        justify-content: center;
+
+        .admin-name {
+          display: none;
+        }
+      }
+
+      .admin-change-pwd-btn {
+        span {
+          display: none;
+        }
+      }
+    }
   }
 }
 
