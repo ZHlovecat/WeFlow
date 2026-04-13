@@ -2,6 +2,14 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+
+  .ant-table-wrapper {
+    flex: 1;
+    overflow: hidden;
+    min-width: 0;
+  }
 
   .ant-table-cell-fix-left,
   .ant-table-cell-fix-right {
