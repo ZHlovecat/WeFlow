@@ -5,7 +5,7 @@ import {
 } from 'antd'
 import {
   EditOutlined, ReloadOutlined, TagsOutlined,
-  TeamOutlined, EyeOutlined, SearchOutlined,
+  TeamOutlined, EyeOutlined, SearchOutlined, CalendarOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import './StoreListPage.scss'
@@ -72,6 +72,16 @@ interface PageResponse {
   }
 }
 
+interface ApplyItem {
+  id: number
+  name: string
+  day: string
+  time_type: string
+  time_start: string
+  time_end: string
+  store_id: number
+}
+
 const GENDER_COLORS: Record<string, string> = { '男': 'blue', '女': 'magenta' }
 const STATUS_COLORS: Record<string, string> = {
   '已添加': 'green', '未添加': 'default', '待通过': 'orange',
@@ -105,6 +115,12 @@ function StoreListPage() {
   const [searchName, setSearchName] = useState('')
   const [isSearchMode, setIsSearchMode] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
+
+  // 关联面试预约
+  const [bindRecord, setBindRecord] = useState<StoreItem | null>(null)
+  const [applyList, setApplyList] = useState<ApplyItem[]>([])
+  const [applyLoading, setApplyLoading] = useState(false)
+  const [bindLoading, setBindLoading] = useState(false)
 
   const fetchStores = useCallback(async (page: number = 1, size?: number) => {
     const actualSize = size || pageSize
@@ -205,6 +221,49 @@ function StoreListPage() {
     setSearchName('')
     setIsSearchMode(false)
     fetchStores(1)
+  }
+
+  // ---- 关联面试预约 ----
+
+  const openBindModal = async (record: StoreItem) => {
+    setBindRecord(record)
+    setApplyLoading(true)
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/apply/list`)
+      const json = await res.json()
+      if (json.errno === 0) {
+        setApplyList(json.data.data || [])
+      }
+    } catch {
+      message.error('获取面试预约列表失败')
+    } finally {
+      setApplyLoading(false)
+    }
+  }
+
+  const handleBind = async (applyId: number) => {
+    if (!bindRecord) return
+    setBindLoading(true)
+    try {
+      const res = await adminFetch(
+        `${API_BASE}/admin/apply/bindUser?id=${applyId}&store_id=${bindRecord.id}`
+      )
+      const json = await res.json()
+      if (json.errno === 0) {
+        message.success('关联成功')
+        const listRes = await adminFetch(`${API_BASE}/admin/apply/list`)
+        const listJson = await listRes.json()
+        if (listJson.errno === 0) {
+          setApplyList(listJson.data.data || [])
+        }
+      } else {
+        message.error(json.errmsg || '关联失败')
+      }
+    } catch {
+      message.error('关联请求失败')
+    } finally {
+      setBindLoading(false)
+    }
   }
 
   // ---- 编辑 ----
@@ -473,7 +532,7 @@ function StoreListPage() {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 260,
       fixed: 'right',
       align: 'center',
       render: (_: unknown, record: StoreItem) => (
@@ -486,6 +545,9 @@ function StoreListPage() {
           </Button>
           <Button type="link" size="small" icon={<TagsOutlined />} onClick={() => openTagManager(record)}>
             标签
+          </Button>
+          <Button type="link" size="small" icon={<CalendarOutlined />} onClick={() => openBindModal(record)}>
+            预约
           </Button>
         </Space>
       ),
@@ -724,6 +786,67 @@ function StoreListPage() {
                 )
               })}
             </div>
+          </Spin>
+        )}
+      </Modal>
+
+      {/* 关联面试预约弹窗 */}
+      <Modal
+        title={`关联面试预约 - ${bindRecord?.name || ''}`}
+        open={!!bindRecord}
+        onCancel={() => setBindRecord(null)}
+        footer={null}
+        width={700}
+      >
+        {bindRecord && (
+          <Spin spinning={applyLoading}>
+            <Alert
+              type="info"
+              message={`当前人员：${bindRecord.name}（ID: ${bindRecord.id}），选择面试预约进行关联`}
+              style={{ marginBottom: 16 }}
+              showIcon
+            />
+            <Table<ApplyItem>
+              dataSource={applyList}
+              rowKey="id"
+              size="small"
+              pagination={false}
+              scroll={{ y: 360 }}
+              columns={[
+                { title: 'ID', dataIndex: 'id', key: 'id', width: 50, align: 'center' },
+                { title: '姓名', dataIndex: 'name', key: 'name', width: 80 },
+                { title: '日期', dataIndex: 'day', key: 'day', width: 100 },
+                { title: '时段', dataIndex: 'time_type', key: 'time_type', width: 60, align: 'center' },
+                {
+                  title: '时间', key: 'time', width: 110,
+                  render: (_: unknown, r: ApplyItem) => `${r.time_start}-${r.time_end}`,
+                },
+                {
+                  title: '状态', dataIndex: 'store_id', key: 'store_id', width: 100, align: 'center',
+                  render: (v: number) => {
+                    if (v === bindRecord.id) return <Tag color="green">已关联</Tag>
+                    if (v && v !== 0) return <Tag color="orange">已关联他人</Tag>
+                    return <Tag>未关联</Tag>
+                  },
+                },
+                {
+                  title: '操作', key: 'action', width: 80, align: 'center',
+                  render: (_: unknown, r: ApplyItem) => {
+                    if (r.store_id === bindRecord.id) return <Tag color="green">已关联</Tag>
+                    return (
+                      <Button
+                        type="primary"
+                        size="small"
+                        loading={bindLoading}
+                        onClick={() => handleBind(r.id)}
+                      >
+                        关联
+                      </Button>
+                    )
+                  },
+                },
+              ]}
+            />
           </Spin>
         )}
       </Modal>
