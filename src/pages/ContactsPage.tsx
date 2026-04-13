@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type UIEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, RefreshCw, X, User, Users, MessageSquare, Loader2, FolderOpen, Download, ChevronDown, MessageCircle, UserX, AlertTriangle, ClipboardList, Aperture } from 'lucide-react'
+import { Search, RefreshCw, X, User, Users, MessageSquare, Loader2, FolderOpen, Download, MessageCircle, UserX, AlertTriangle, ClipboardList, Aperture } from 'lucide-react'
 import { useChatStore } from '../stores/chatStore'
 import { toContactTypeCardCounts, useContactTypeCountsStore } from '../stores/contactTypeCountsStore'
 import * as configService from '../services/config'
@@ -63,12 +63,11 @@ function ContactsPage() {
     const { setCurrentSession } = useChatStore()
 
     // 导出相关状态
-    const [exportFormat, setExportFormat] = useState<'json' | 'csv' | 'vcf'>('json')
-    const [exportAvatars, setExportAvatars] = useState(true)
+    const [exportFormat] = useState<'json'>('json')
+    const [exportAvatars] = useState(false)
     const [exportFolder, setExportFolder] = useState('')
     const [isExporting, setIsExporting] = useState(false)
-    const [showFormatSelect, setShowFormatSelect] = useState(false)
-    const formatDropdownRef = useRef<HTMLDivElement>(null)
+    
     const listRef = useRef<HTMLDivElement>(null)
     const loadVersionRef = useRef(0)
     const [avatarEnrichProgress, setAvatarEnrichProgress] = useState({
@@ -596,17 +595,7 @@ function ContactsPage() {
         }
     }, [filteredContacts.length, listViewportHeight, scrollTop])
 
-    // 搜索和类型过滤
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            const target = event.target as Node
-            if (showFormatSelect && formatDropdownRef.current && !formatDropdownRef.current.contains(target)) {
-                setShowFormatSelect(false)
-            }
-        }
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [showFormatSelect])
+    
 
     const selectedInFilteredCount = useMemo(() => {
         return filteredContacts.reduce((count, contact) => {
@@ -823,15 +812,7 @@ function ContactsPage() {
         }
     }
 
-    const exportFormatOptions = [
-        { value: 'json', label: 'JSON', desc: '详细格式，包含完整联系人信息' },
-        { value: 'csv', label: 'CSV (Excel)', desc: '电子表格格式，适合Excel查看' },
-        { value: 'vcf', label: 'VCF (vCard)', desc: '标准名片格式，支持导入手机' }
-    ]
-
-    const getOptionLabel = (value: string) => {
-        return exportFormatOptions.find(opt => opt.value === value)?.label || value
-    }
+    const getOptionLabel = (_value: string) => 'JSON'
 
     return (
         <div className="contacts-page">
@@ -1024,42 +1005,10 @@ function ContactsPage() {
                     <div className="settings-content">
                         <div className="setting-section">
                             <h3>导出格式</h3>
-                            <div className="format-select" ref={formatDropdownRef}>
-                                <button
-                                    type="button"
-                                    className={`select-trigger ${showFormatSelect ? 'open' : ''}`}
-                                    onClick={() => setShowFormatSelect(!showFormatSelect)}
-                                >
-                                    <span className="select-value">{getOptionLabel(exportFormat)}</span>
-                                    <ChevronDown size={16} />
-                                </button>
-                                {showFormatSelect && (
-                                    <div className="select-dropdown">
-                                        {exportFormatOptions.map(option => (
-                                            <button
-                                                key={option.value}
-                                                type="button"
-                                                className={`select-option ${exportFormat === option.value ? 'active' : ''}`}
-                                                onClick={() => {
-                                                    setExportFormat(option.value as 'json' | 'csv' | 'vcf')
-                                                    setShowFormatSelect(false)
-                                                }}
-                                            >
-                                                <span className="option-label">{option.label}</span>
-                                                <span className="option-desc">{option.desc}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
+                            <div className="format-display">
+                                <span>{getOptionLabel(exportFormat)}</span>
+                                <span className="format-desc">详细格式，包含完整联系人信息</span>
                             </div>
-                        </div>
-
-                        <div className="setting-section">
-                            <h3>导出选项</h3>
-                            <label className="checkbox-item">
-                                <input type="checkbox" checked={exportAvatars} onChange={e => setExportAvatars(e.target.checked)} />
-                                <span>导出头像</span>
-                            </label>
                         </div>
 
                         <div className="setting-section">
