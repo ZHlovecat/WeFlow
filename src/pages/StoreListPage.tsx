@@ -532,7 +532,7 @@ function StoreListPage() {
     {
       title: '操作',
       key: 'action',
-      width: 260,
+      width: 320,
       fixed: 'right',
       align: 'center',
       render: (_: unknown, record: StoreItem) => (
@@ -595,7 +595,7 @@ function StoreListPage() {
         dataSource={stores}
         rowKey="id"
         loading={loading || searchLoading}
-        scroll={{ x: 1800 }}
+        scroll={{ x: 1860 }}
         pagination={isSearchMode ? false : {
           current: currentPage,
           total,
