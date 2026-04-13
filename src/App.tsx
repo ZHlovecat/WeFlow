@@ -579,7 +579,7 @@ function App() {
   }
 
   return (
-    <div className="app-container">
+    <div className={`app-container${isMacPlatform ? ' app-mac' : ''}`}>
       <div className="window-drag-region" aria-hidden="true" />
       {isLocked && (
         <LockScreen
