@@ -2,4 +2,24 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+
+  .ant-table-cell-fix-left,
+  .ant-table-cell-fix-right {
+    background: inherit;
+  }
+
+  .ant-table-thead .ant-table-cell-fix-left,
+  .ant-table-thead .ant-table-cell-fix-right {
+    background: var(--bg-secondary, #fafafa);
+  }
+
+  .ant-table-tbody .ant-table-cell-fix-left,
+  .ant-table-tbody .ant-table-cell-fix-right {
+    background: var(--bg-primary, #fff);
+  }
+
+  .ant-table-row:hover .ant-table-cell-fix-left,
+  .ant-table-row:hover .ant-table-cell-fix-right {
+    background: var(--bg-tertiary, #fafafa);
+  }
 }
