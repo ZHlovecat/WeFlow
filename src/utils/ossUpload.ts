@@ -1,50 +1,69 @@
 import { adminFetch, API_BASE } from './adminFetch'
 
 /**
- * 服务端 GET /admin/auth/getOssSignature?type=company|shop 返回
- * - host、dir：与原先阿里云 OSS 一致（域名、存储路径/目录不变）
- * - policy、algorithm、credential、date、signature：火山引擎 TOS PostObject 签名
- * 文档：https://www.volcengine.com/docs/6349/129225
+ * 后端 GET /admin/auth/getOssSignature?type=company|shop 返回的 data（火山 TOS，host/dir 不变）
+ * 示例：
+ * {
+ *   "accessKeyId": "...",
+ *   "policy": "eyJ...",
+ *   "signature": "ce45b0b0...",
+ *   "host": "https://chauge-job.tos-cn-shanghai.volces.com",
+ *   "dir": "meeting-store/company/company_xxx.png",
+ *   "expire": 1776337641734,
+ *   "bucket": "chauge-job",
+ *   "algorithm": "TOS4-HMAC-SHA256",
+ *   "credential": "AK.../20260416/cn-shanghai/tos/request",
+ *   "date": "20260416T100721Z",
+ *   "region": "cn-shanghai"
+ * }
  */
-export interface UploadSignatureData {
-  /** 上传 POST 基址，与原先一致，如 https://your-domain.com 或桶域名 */
-  host: string
-  /** 对象完整路径（原 OSS 的 dir），目录规则不变 */
-  dir: string
+export interface GetOssSignatureData {
+  accessKeyId: string
   policy: string
-  /** 一般为 TOS4-HMAC-SHA256 */
+  /** TOS Post 签名为十六进制，与旧版阿里云 OSS 字段名相同 */
+  signature: string
+  host: string
+  /** 对象完整路径，上传表单里的 key */
+  dir: string
+  expire: number
+  bucket: string
   algorithm: string
   credential: string
   date: string
-  signature: string
+  region: string
   securityToken?: string
 }
 
 interface SignatureResponse {
   errno: number
   errmsg: string
-  data: UploadSignatureData | Record<string, unknown>
+  data: GetOssSignatureData | Record<string, unknown>
 }
 
-function normalizeUploadData(raw: Record<string, unknown>): UploadSignatureData {
-  const pick = (...keys: string[]): string => {
-    for (const k of keys) {
-      const v = raw[k]
-      if (typeof v === 'string' && v.length > 0) return v
-    }
-    return ''
-  }
-  const host = pick('host')
-  // 与原先 OSS 字段名一致用 dir；兼容后端写 key
-  const dir = pick('dir', 'key')
-  const policy = pick('policy')
-  const algorithm = pick('algorithm', 'x_tos_algorithm')
-  const credential = pick('credential', 'x_tos_credential')
-  const date = pick('date', 'x_tos_date')
-  const signature = pick('signature', 'x_tos_signature')
-  const st = pick('securityToken', 'x_tos_security_token', 'security_token')
+/** 从接口 data 提取火山 TOS 浏览器上传所需字段 */
+function dataToTosForm(data: Record<string, unknown>): {
+  host: string
+  dir: string
+  policy: string
+  algorithm: string
+  credential: string
+  date: string
+  signature: string
+  securityToken?: string
+} {
+  const str = (v: unknown) => (typeof v === 'string' ? v : '')
+  const host = str(data.host)
+  const dir = str(data.dir) || str(data.key)
+  const policy = str(data.policy)
+  const algorithm = str(data.algorithm)
+  const credential = str(data.credential)
+  const date = str(data.date)
+  const signature = str(data.signature)
+  const securityToken = str(data.securityToken) || str(data.x_tos_security_token) || undefined
   if (!host || !dir || !policy || !algorithm || !credential || !date || !signature) {
-    throw new Error('上传签名数据不完整（需 host、dir、policy、algorithm、credential、date、signature）')
+    throw new Error(
+      '上传签名不完整：需要 host、dir、policy、algorithm、credential、date、signature（与 getOssSignature 返回一致）'
+    )
   }
   return {
     host,
@@ -54,11 +73,11 @@ function normalizeUploadData(raw: Record<string, unknown>): UploadSignatureData 
     credential,
     date,
     signature,
-    ...(st ? { securityToken: st } : {}),
+    ...(securityToken ? { securityToken } : {}),
   }
 }
 
-async function getUploadSignature(type: 'company' | 'shop'): Promise<UploadSignatureData> {
+async function getUploadSignature(type: 'company' | 'shop') {
   const res = await adminFetch(`${API_BASE}/admin/auth/getOssSignature?type=${type}`)
   const json = (await res.json()) as SignatureResponse
   if (json.errno !== 0) {
@@ -67,7 +86,7 @@ async function getUploadSignature(type: 'company' | 'shop'): Promise<UploadSigna
   if (!json.data || typeof json.data !== 'object') {
     throw new Error('上传签名为空')
   }
-  return normalizeUploadData(json.data as Record<string, unknown>)
+  return dataToTosForm(json.data as Record<string, unknown>)
 }
 
 function buildPublicUrl(host: string, dir: string): string {
@@ -77,8 +96,7 @@ function buildPublicUrl(host: string, dir: string): string {
 }
 
 /**
- * 通过服务端签名上传图片到火山引擎 TOS（企业 Logo / 门店形象图）。
- * 接口路径与返回的 host、dir 与原先阿里云 OSS 保持一致，仅底层存储与表单签名为 TOS。
+ * 使用 getOssSignature 返回的火山 TOS 字段做 PostObject 上传；最终 URL 仍为 host + '/' + dir。
  */
 export async function uploadImageToOss(file: File, type: 'company' | 'shop'): Promise<string> {
   const s = await getUploadSignature(type)

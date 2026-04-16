@@ -27,7 +27,10 @@ async function main() {
       continue
     }
     const d = json.data || {}
-    for (const k of ['host', 'dir', 'policy', 'algorithm', 'credential', 'date', 'signature', 'securityToken']) {
+    for (const k of [
+      'accessKeyId', 'host', 'dir', 'bucket', 'region', 'expire',
+      'policy', 'algorithm', 'credential', 'date', 'signature', 'securityToken',
+    ]) {
       const v = d[k]
       const preview = typeof v === 'string' && v.length > 100 ? `${v.slice(0, 100)}...` : v
       console.log(`  ${k}:`, preview ?? '(missing)')
