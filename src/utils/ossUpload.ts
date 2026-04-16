@@ -1,32 +1,32 @@
 import { adminFetch, API_BASE } from './adminFetch'
 
 /**
- * 火山引擎 TOS 浏览器 PostObject 表单上传所需字段（由后端 GET /admin/auth/getTosSignature 生成）
+ * 服务端 GET /admin/auth/getOssSignature?type=company|shop 返回
+ * - host、dir：与原先阿里云 OSS 一致（域名、存储路径/目录不变）
+ * - policy、algorithm、credential、date、signature：火山引擎 TOS PostObject 签名
  * 文档：https://www.volcengine.com/docs/6349/129225
  */
-export interface TosSignatureData {
-  /** 上传 POST 地址，如 https://bucket.tos-cn-beijing.volces.com */
+export interface UploadSignatureData {
+  /** 上传 POST 基址，与原先一致，如 https://your-domain.com 或桶域名 */
   host: string
-  /** 对象 Key（完整路径） */
-  key: string
+  /** 对象完整路径（原 OSS 的 dir），目录规则不变 */
+  dir: string
   policy: string
-  /** 固定为 TOS4-HMAC-SHA256 */
+  /** 一般为 TOS4-HMAC-SHA256 */
   algorithm: string
   credential: string
   date: string
-  /** 十六进制小写签名 */
   signature: string
-  /** STS 临时凭证时必填 */
   securityToken?: string
 }
 
-interface TosSignatureResponse {
+interface SignatureResponse {
   errno: number
   errmsg: string
-  data: TosSignatureData | Record<string, unknown>
+  data: UploadSignatureData | Record<string, unknown>
 }
 
-function normalizeTosData(raw: Record<string, unknown>): TosSignatureData {
+function normalizeUploadData(raw: Record<string, unknown>): UploadSignatureData {
   const pick = (...keys: string[]): string => {
     for (const k of keys) {
       const v = raw[k]
@@ -35,19 +35,20 @@ function normalizeTosData(raw: Record<string, unknown>): TosSignatureData {
     return ''
   }
   const host = pick('host')
-  const key = pick('key')
+  // 与原先 OSS 字段名一致用 dir；兼容后端写 key
+  const dir = pick('dir', 'key')
   const policy = pick('policy')
   const algorithm = pick('algorithm', 'x_tos_algorithm')
   const credential = pick('credential', 'x_tos_credential')
   const date = pick('date', 'x_tos_date')
   const signature = pick('signature', 'x_tos_signature')
   const st = pick('securityToken', 'x_tos_security_token', 'security_token')
-  if (!host || !key || !policy || !algorithm || !credential || !date || !signature) {
-    throw new Error('TOS 签名数据不完整（需 host、key、policy、algorithm、credential、date、signature）')
+  if (!host || !dir || !policy || !algorithm || !credential || !date || !signature) {
+    throw new Error('上传签名数据不完整（需 host、dir、policy、algorithm、credential、date、signature）')
   }
   return {
     host,
-    key,
+    dir,
     policy,
     algorithm,
     credential,
@@ -57,35 +58,33 @@ function normalizeTosData(raw: Record<string, unknown>): TosSignatureData {
   }
 }
 
-async function getTosSignature(type: 'company' | 'shop'): Promise<TosSignatureData> {
-  const res = await adminFetch(`${API_BASE}/admin/auth/getTosSignature?type=${type}`)
-  const json = (await res.json()) as TosSignatureResponse
+async function getUploadSignature(type: 'company' | 'shop'): Promise<UploadSignatureData> {
+  const res = await adminFetch(`${API_BASE}/admin/auth/getOssSignature?type=${type}`)
+  const json = (await res.json()) as SignatureResponse
   if (json.errno !== 0) {
-    throw new Error(json.errmsg || '获取 TOS 签名失败')
+    throw new Error(json.errmsg || '获取上传签名失败')
   }
   if (!json.data || typeof json.data !== 'object') {
-    throw new Error('TOS 签名为空')
+    throw new Error('上传签名为空')
   }
-  return normalizeTosData(json.data as Record<string, unknown>)
+  return normalizeUploadData(json.data as Record<string, unknown>)
 }
 
-function buildObjectUrl(host: string, key: string): string {
+function buildPublicUrl(host: string, dir: string): string {
   const h = host.replace(/\/$/, '')
-  const k = key.replace(/^\//, '')
-  return `${h}/${k}`
+  const d = dir.replace(/^\//, '')
+  return `${h}/${d}`
 }
 
 /**
- * 通过服务端签名上传图片到火山引擎 TOS（企业 Logo / 门店形象图）
- * @param file 要上传的文件
- * @param type 上传类型：company（企业）或 shop（门店）
- * @returns 上传后的完整 URL
+ * 通过服务端签名上传图片到火山引擎 TOS（企业 Logo / 门店形象图）。
+ * 接口路径与返回的 host、dir 与原先阿里云 OSS 保持一致，仅底层存储与表单签名为 TOS。
  */
 export async function uploadImageToOss(file: File, type: 'company' | 'shop'): Promise<string> {
-  const s = await getTosSignature(type)
+  const s = await getUploadSignature(type)
 
   const formData = new FormData()
-  formData.append('key', s.key)
+  formData.append('key', s.dir)
   formData.append('policy', s.policy)
   formData.append('x-tos-algorithm', s.algorithm)
   formData.append('x-tos-credential', s.credential)
@@ -94,7 +93,6 @@ export async function uploadImageToOss(file: File, type: 'company' | 'shop'): Pr
   if (s.securityToken) {
     formData.append('x-tos-security-token', s.securityToken)
   }
-  // file 须放在最后；不在此附加 Content-Type，避免与 policy 中未声明的字段冲突
   formData.append('file', file)
 
   const res = await fetch(s.host, {
@@ -107,5 +105,5 @@ export async function uploadImageToOss(file: File, type: 'company' | 'shop'): Pr
     throw new Error(`上传失败，状态码：${res.status}${text ? ` ${text.slice(0, 200)}` : ''}`)
   }
 
-  return buildObjectUrl(s.host, s.key)
+  return buildPublicUrl(s.host, s.dir)
 }
