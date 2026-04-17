@@ -5,11 +5,12 @@ import {
 } from 'antd'
 import {
   PlusOutlined, EditOutlined, ReloadOutlined, DeleteOutlined,
-  UserOutlined, KeyOutlined,
+  UserOutlined, KeyOutlined, LinkOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 
 import { adminFetch, API_BASE } from '../utils/adminFetch'
+import MiniUserPickerModal from '../components/MiniUserPickerModal'
 
 interface AdminItem {
   id: number
@@ -42,6 +43,9 @@ function AccountListPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [addLoading, setAddLoading] = useState(false)
   const [addForm] = Form.useForm()
+
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [linkRecord, setLinkRecord] = useState<AdminItem | null>(null)
 
   const fetchAdmins = useCallback(async (page = 1, size?: number) => {
     setLoading(true)
@@ -112,6 +116,31 @@ function AccountListPage() {
     }
   }
 
+  const openLink = (record: AdminItem) => {
+    setLinkRecord(record)
+    setLinkOpen(true)
+  }
+
+  const handleLinkConfirm = async (userId: number) => {
+    if (!linkRecord) return false
+    try {
+      const form = new FormData()
+      form.append('id', String(linkRecord.id))
+      form.append('user_id', String(userId))
+      const res = await adminFetch(`${API_BASE}/admin/admin/setAdminRole`, { method: 'POST', body: form })
+      const json = await res.json()
+      if (json.errno === 0) {
+        message.success('关联成功')
+        return true
+      }
+      message.error(json.errmsg || '关联失败')
+      return false
+    } catch (e: any) {
+      message.error(e?.message || '请求失败')
+      return false
+    }
+  }
+
   const handleDelete = async (id: number) => {
     try {
       const res = await adminFetch(`${API_BASE}/admin/admin/delete?id=${id}`)
@@ -151,9 +180,12 @@ function AccountListPage() {
     },
     { title: '创建时间', dataIndex: 'create_time', key: 'create_time', width: 170 },
     {
-      title: '操作', key: 'action', width: 200, align: 'center',
+      title: '操作', key: 'action', width: 320, align: 'center',
       render: (_: unknown, record: AdminItem) => (
         <Space size="small">
+          <Button type="link" size="small" icon={<LinkOutlined />} onClick={() => openLink(record)}>
+            关联小程序权限
+          </Button>
           <Popconfirm title="确认重置密码为 123456？" onConfirm={() => handleResetPassword(record.id)} okText="确认" cancelText="取消">
             <Button type="link" size="small" icon={<KeyOutlined />}>重置密码</Button>
           </Popconfirm>
@@ -207,6 +239,13 @@ function AccountListPage() {
         </Form>
         <Alert type="info" message="新增账号默认密码为 123456" showIcon style={{ marginTop: 8 }} />
       </Modal>
+
+      <MiniUserPickerModal
+        open={linkOpen}
+        title={linkRecord ? `为账号 ${linkRecord.username} 关联小程序权限` : '关联小程序权限'}
+        onCancel={() => { setLinkOpen(false); setLinkRecord(null) }}
+        onConfirm={handleLinkConfirm}
+      />
     </div>
   )
 }

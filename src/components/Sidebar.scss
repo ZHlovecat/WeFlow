@@ -10,22 +10,41 @@
   &.collapsed {
     width: 64px;
 
+    .nav-menu {
+      padding: 0 8px;
+    }
+
+    .sidebar-footer {
+      padding: 12px 8px 0;
+    }
+
     .sidebar-user-card-wrap {
-      margin: 0 8px 8px;
+      margin: 0 0 8px;
     }
 
     .sidebar-user-card {
-      padding: 8px 0;
+      padding: 4px;
       justify-content: center;
+      min-height: 44px;
+      gap: 0;
+      border-radius: 10px;
 
       .user-meta {
         display: none;
       }
+
+      .user-avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+      }
     }
 
-    .nav-menu,
-    .sidebar-footer {
-      padding: 0 8px;
+    // 收起时菜单从 sidebar 左侧贴边弹出，避免被过窄的 wrap 定位偏移
+    .sidebar-user-menu {
+      left: 4px;
+      right: auto;
+      width: 200px;
     }
 
     .nav-label {
@@ -42,7 +61,8 @@
       flex-direction: column;
       align-items: center;
       padding: 0;
-      gap: 4px;
+      gap: 6px;
+      margin-bottom: 8px;
 
       .admin-account {
         justify-content: center;
@@ -53,6 +73,9 @@
       }
 
       .admin-change-pwd-btn {
+        padding: 6px;
+        border-radius: 8px;
+
         span {
           display: none;
         }

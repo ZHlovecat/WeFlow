@@ -16,7 +16,7 @@ ReactDOM.createRoot(document.getElementById('app')!).render(
       locale={zhCN}
       theme={{
         token: {
-          colorPrimary: '#8B7355',
+          colorPrimary: '#1677ff',
           borderRadius: 8,
           colorBgContainer: 'rgba(255, 255, 255, 0.7)',
           colorBgLayout: '#F0EEE9',

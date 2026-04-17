@@ -5,12 +5,13 @@ import {
 } from 'antd'
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, UserOutlined,
-  UserSwitchOutlined, ReloadOutlined,
+  UserSwitchOutlined, ReloadOutlined, LinkOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import './ManagerListPage.scss'
 
 import { adminFetch, API_BASE } from '../utils/adminFetch'
+import MiniUserPickerModal from '../components/MiniUserPickerModal'
 
 interface ManagerItem {
   id: number
@@ -57,6 +58,10 @@ function ManagerListPage() {
   const [editRecord, setEditRecord] = useState<ManagerItem | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [form] = Form.useForm()
+
+  // 关联小程序权限弹窗
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [linkRecord, setLinkRecord] = useState<ManagerItem | null>(null)
 
   const isAddMode = !editRecord
 
@@ -196,6 +201,33 @@ function ManagerListPage() {
     }
   }
 
+  // ---- 关联小程序权限 ----
+
+  const openLink = (record: ManagerItem) => {
+    setLinkRecord(record)
+    setLinkOpen(true)
+  }
+
+  const handleLinkConfirm = async (userId: number) => {
+    if (!linkRecord) return false
+    try {
+      const body = new FormData()
+      body.append('id', String(linkRecord.id))
+      body.append('user_id', String(userId))
+      const res = await adminFetch(`${API_BASE}/admin/shop/setUserRole`, { method: 'POST', body })
+      const json = await res.json()
+      if (json.errno === 0) {
+        message.success('关联成功')
+        return true
+      }
+      message.error(json.errmsg || '关联失败')
+      return false
+    } catch (e: any) {
+      message.error(e?.message || '请求失败')
+      return false
+    }
+  }
+
   // ---- 删除 ----
 
   const handleDelete = async (id: number) => {
@@ -290,11 +322,14 @@ function ManagerListPage() {
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 280,
       align: 'center',
       fixed: 'right',
       render: (_: unknown, record: ManagerItem) => (
         <Space size="small">
+          <Button type="link" size="small" icon={<LinkOutlined />} onClick={() => openLink(record)}>
+            关联小程序权限
+          </Button>
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(record)}>
             编辑
           </Button>
@@ -425,6 +460,13 @@ function ManagerListPage() {
           </Form.Item>
         </Form>
       </Modal>
+
+      <MiniUserPickerModal
+        open={linkOpen}
+        title={linkRecord ? `为店长 ${linkRecord.name || linkRecord.id} 关联小程序权限` : '关联小程序权限'}
+        onCancel={() => { setLinkOpen(false); setLinkRecord(null) }}
+        onConfirm={handleLinkConfirm}
+      />
     </div>
   )
 }

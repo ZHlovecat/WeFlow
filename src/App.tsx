@@ -36,6 +36,8 @@ import StoreListPage from './pages/StoreListPage'
 import InterviewListPage from './pages/InterviewListPage'
 import AccountListPage from './pages/AccountListPage'
 import RoleListPage from './pages/RoleListPage'
+import MiniUserListPage from './pages/MiniUserListPage'
+import DictPage from './pages/DictPage'
 
 import { useAppStore } from './stores/appStore'
 import { themes, useThemeStore, type ThemeId, type ThemeMode } from './stores/themeStore'
@@ -775,9 +777,11 @@ function App() {
               <Route path="/city" element={<CityListPage />} />
               <Route path="/time" element={<TimeListPage />} />
               <Route path="/tag-dict" element={<TagDictPage />} />
+              <Route path="/dict" element={<DictPage />} />
               <Route path="/store" element={<StoreListPage />} />
               <Route path="/interview" element={<InterviewListPage />} />
               <Route path="/account" element={<AccountListPage />} />
+              <Route path="/mini-user" element={<MiniUserListPage />} />
               <Route path="/role" element={<RoleListPage />} />
               <Route path="/chat-history/:sessionId/:messageId" element={<ChatHistoryPage />} />
               <Route path="/chat-history-inline/:payloadId" element={<ChatHistoryPage />} />

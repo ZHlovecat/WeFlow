@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, RefreshCw, FolderClosed, Building2, Store, ChevronDown, Wrench, MapPin, Clock, UserCog, Tag, LogOut, Users, Shield, KeyRound, CalendarCheck } from 'lucide-react'
+import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, RefreshCw, FolderClosed, Building2, Store, ChevronDown, Wrench, MapPin, Clock, UserCog, Tag, LogOut, Users, Shield, KeyRound, CalendarCheck, UsersRound, Book } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
 import { useChatStore } from '../stores/chatStore'
 import { useAnalyticsStore } from '../stores/analyticsStore'
@@ -534,7 +534,7 @@ function Sidebar({ collapsed }: SidebarProps) {
 
           {/* 系统配置维护 */}
           {hasMenu([106]) && (
-          <div className={`nav-group ${isActive('/city') || isActive('/time') || isActive('/tag-dict') ? 'has-active' : ''}`}>
+          <div className={`nav-group ${isActive('/city') || isActive('/time') || isActive('/tag-dict') || isActive('/dict') ? 'has-active' : ''}`}>
             <div
               className={`nav-item nav-group-title ${configMenuOpen ? 'open' : ''}`}
               onClick={() => setConfigMenuOpen(!configMenuOpen)}
@@ -572,6 +572,16 @@ function Sidebar({ collapsed }: SidebarProps) {
                   <span className="nav-icon"><Tag size={18} /></span>
                   <span className="nav-label">标签字典</span>
                 </NavLink>
+                {hasMenu([115]) && (
+                <NavLink
+                  to="/dict"
+                  className={`nav-item nav-child ${isActive('/dict') ? 'active' : ''}`}
+                  title={collapsed ? '通用字典' : undefined}
+                >
+                  <span className="nav-icon"><Book size={18} /></span>
+                  <span className="nav-label">通用字典</span>
+                </NavLink>
+                )}
               </div>
             )}
           </div>
@@ -579,7 +589,7 @@ function Sidebar({ collapsed }: SidebarProps) {
 
           {/* 系统管理 */}
           {hasMenu([107]) && (
-          <div className={`nav-group ${isActive('/account') || isActive('/role') ? 'has-active' : ''}`}>
+          <div className={`nav-group ${isActive('/account') || isActive('/mini-user') || isActive('/role') ? 'has-active' : ''}`}>
             <div
               className={`nav-item nav-group-title ${sysMenuOpen ? 'open' : ''}`}
               onClick={() => setSysMenuOpen(!sysMenuOpen)}
@@ -601,6 +611,16 @@ function Sidebar({ collapsed }: SidebarProps) {
                   <span className="nav-icon"><UserCog size={18} /></span>
                   <span className="nav-label">账号管理</span>
                 </NavLink>
+                {hasMenu([114]) && (
+                <NavLink
+                  to="/mini-user"
+                  className={`nav-item nav-child ${isActive('/mini-user') ? 'active' : ''}`}
+                  title={collapsed ? '小程序用户管理' : undefined}
+                >
+                  <span className="nav-icon"><UsersRound size={18} /></span>
+                  <span className="nav-label">小程序用户管理</span>
+                </NavLink>
+                )}
                 <NavLink
                   to="/role"
                   className={`nav-item nav-child ${isActive('/role') ? 'active' : ''}`}

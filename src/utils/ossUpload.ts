@@ -120,7 +120,17 @@ export async function uploadImageToOss(file: File, type: 'company' | 'shop'): Pr
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`上传失败，状态码：${res.status}${text ? ` ${text.slice(0, 200)}` : ''}`)
+    const code = text.match(/<Code>([^<]+)<\/Code>/)?.[1]
+    const msg = text.match(/<Message>([^<]+)<\/Message>/)?.[1]
+    console.error('[ossUpload] TOS 上传失败', {
+      status: res.status,
+      host: s.host,
+      dir: s.dir,
+      hasSecurityToken: !!s.securityToken,
+      body: text.slice(0, 500),
+    })
+    const detail = code || msg ? `[${code ?? ''}] ${msg ?? ''}`.trim() : text.slice(0, 200)
+    throw new Error(`上传失败 ${res.status}：${detail || '无响应'}`)
   }
 
   return buildPublicUrl(s.host, s.dir)

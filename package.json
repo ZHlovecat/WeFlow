@@ -15,7 +15,7 @@
   "scripts": {
     "postinstall": "electron-builder install-app-deps",
     "rebuild": "electron-rebuild",
-    "dev": "chcp 65001 >nul && vite",
+    "dev": "node -e \"process.platform==='win32'&&require('child_process').execSync('chcp 65001',{stdio:'inherit'})\" && vite",
     "typecheck": "tsc --noEmit",
     "build": "tsc && vite build && electron-builder",
     "preview": "vite preview",
