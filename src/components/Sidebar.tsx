@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, RefreshCw, FolderClosed, Building2, Store, ChevronDown, Wrench, MapPin, Clock, UserCog, Tag, LogOut, Users, Shield, KeyRound, CalendarCheck, UsersRound, Book } from 'lucide-react'
+import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, RefreshCw, FolderClosed, Building2, Store, ChevronDown, Wrench, MapPin, Clock, UserCog, Tag, LogOut, Users, Shield, KeyRound, CalendarCheck, UsersRound, Book, Briefcase, Layers } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
 import { useChatStore } from '../stores/chatStore'
 import { useAnalyticsStore } from '../stores/analyticsStore'
@@ -532,9 +532,21 @@ function Sidebar({ collapsed }: SidebarProps) {
           </NavLink>
           )}
 
+          {/* 职位列表 */}
+          {hasMenu([116]) && (
+          <NavLink
+            to="/jobs"
+            className={`nav-item ${isActive('/jobs') ? 'active' : ''}`}
+            title={collapsed ? '职位列表' : undefined}
+          >
+            <span className="nav-icon"><Briefcase size={20} /></span>
+            <span className="nav-label">职位列表</span>
+          </NavLink>
+          )}
+
           {/* 系统配置维护 */}
           {hasMenu([106]) && (
-          <div className={`nav-group ${isActive('/city') || isActive('/time') || isActive('/tag-dict') || isActive('/dict') ? 'has-active' : ''}`}>
+          <div className={`nav-group ${isActive('/city') || isActive('/time') || isActive('/tag-dict') || isActive('/dict') || isActive('/jobs-cate') ? 'has-active' : ''}`}>
             <div
               className={`nav-item nav-group-title ${configMenuOpen ? 'open' : ''}`}
               onClick={() => setConfigMenuOpen(!configMenuOpen)}
@@ -580,6 +592,16 @@ function Sidebar({ collapsed }: SidebarProps) {
                 >
                   <span className="nav-icon"><Book size={18} /></span>
                   <span className="nav-label">通用字典</span>
+                </NavLink>
+                )}
+                {hasMenu([118]) && (
+                <NavLink
+                  to="/jobs-cate"
+                  className={`nav-item nav-child ${isActive('/jobs-cate') ? 'active' : ''}`}
+                  title={collapsed ? '职位大类' : undefined}
+                >
+                  <span className="nav-icon"><Layers size={18} /></span>
+                  <span className="nav-label">职位大类</span>
                 </NavLink>
                 )}
               </div>

@@ -38,11 +38,14 @@ import AccountListPage from './pages/AccountListPage'
 import RoleListPage from './pages/RoleListPage'
 import MiniUserListPage from './pages/MiniUserListPage'
 import DictPage from './pages/DictPage'
+import JobListPage from './pages/JobListPage'
+import JobCateListPage from './pages/JobCateListPage'
 
 import { useAppStore } from './stores/appStore'
 import { themes, useThemeStore, type ThemeId, type ThemeMode } from './stores/themeStore'
 import * as configService from './services/config'
 import * as cloudControl from './services/cloudControl'
+import { refreshUserPermissions } from './services/permission'
 import { Download, X, Shield } from 'lucide-react'
 import './App.scss'
 
@@ -466,6 +469,15 @@ function App() {
     autoConnect()
   }, [isAgreementWindow, isOnboardingWindow, navigate, setDbConnected])
 
+  // 已登录时静默刷新一次菜单权限，捕获后端新增/变更的菜单
+  const isLoggedInForPerm = useAppStore(state => state.isLoggedIn)
+  const authTokenForPerm = useAppStore(state => state.authToken)
+  useEffect(() => {
+    if (isAgreementWindow || isOnboardingWindow || isVideoPlayerWindow || isNotificationWindow) return
+    if (!isLoggedInForPerm || !authTokenForPerm) return
+    refreshUserPermissions()
+  }, [isAgreementWindow, isOnboardingWindow, isVideoPlayerWindow, isNotificationWindow, isLoggedInForPerm, authTokenForPerm])
+
   // 检查应用锁
   useEffect(() => {
     if (isAgreementWindow || isOnboardingWindow || isVideoPlayerWindow) return
@@ -779,6 +791,8 @@ function App() {
               <Route path="/tag-dict" element={<TagDictPage />} />
               <Route path="/dict" element={<DictPage />} />
               <Route path="/store" element={<StoreListPage />} />
+              <Route path="/jobs" element={<JobListPage />} />
+              <Route path="/jobs-cate" element={<JobCateListPage />} />
               <Route path="/interview" element={<InterviewListPage />} />
               <Route path="/account" element={<AccountListPage />} />
               <Route path="/mini-user" element={<MiniUserListPage />} />

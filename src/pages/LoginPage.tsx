@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Button, Input, Form, Modal, Typography, Space } from 'antd'
 import { UserOutlined, LockOutlined, LoginOutlined, PoweroffOutlined } from '@ant-design/icons'
 import { useAppStore } from '../stores/appStore'
-import { adminFetch, API_BASE } from '../utils/adminFetch'
+import { API_BASE } from '../utils/adminFetch'
+import { refreshUserPermissions } from '../services/permission'
 
 const isMac = navigator.userAgent.toLowerCase().includes('mac')
 
@@ -11,54 +12,8 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const setIsLoggedIn = useAppStore(state => state.setIsLoggedIn)
   const setAuth = useAppStore(state => state.setAuth)
-  const setAllowedMenuIds = useAppStore(state => state.setAllowedMenuIds)
   const [isLogging, setIsLogging] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
-
-  const collectTreeIds = (nodes: any[]): number[] => {
-    const ids: number[] = []
-    for (const n of nodes) {
-      ids.push(n.id)
-      if (n.children?.length) ids.push(...collectTreeIds(n.children))
-    }
-    return ids
-  }
-
-  const fetchUserPermissions = async (token: string, userId: number, username: string) => {
-    try {
-      const [adminRes, roleRes, treeRes] = await Promise.all([
-        adminFetch(`${API_BASE}/admin/admin/list?page=1&size=200`),
-        adminFetch(`${API_BASE}/admin/role/list?page=1&size=200`),
-        adminFetch(`${API_BASE}/admin/menu/tree`),
-      ])
-      const adminJson = await adminRes.json()
-      const roleJson = await roleRes.json()
-      const treeJson = await treeRes.json()
-
-      const roles = roleJson.data?.data || []
-      const admins = adminJson.data?.data || []
-      const allTreeIds = collectTreeIds(treeJson.data || [])
-
-      const currentAdmin = admins.find((a: any) => a.id === userId || a.username === username)
-      if (currentAdmin?.role_type) {
-        const role = roles.find((r: any) => r.id === currentAdmin.role_type)
-        if (role) {
-          if (role.roleCode === 'ROLE_ALL') {
-            setAllowedMenuIds(allTreeIds)
-          } else if (role.roles) {
-            const ids = role.roles.split(',').filter(Boolean).map(Number)
-            setAllowedMenuIds(ids)
-          }
-          return
-        }
-      }
-
-      // 内置管理员或未找到角色 → 授予全部权限
-      setAllowedMenuIds(allTreeIds)
-    } catch (e) {
-      console.error('获取权限失败:', e)
-    }
-  }
 
   const handleSubmit = async (values: { username: string; password: string }) => {
     setIsLogging(true)
@@ -74,7 +29,7 @@ export default function LoginPage() {
       if (json.errno === 0 && json.data?.access_token) {
         const { access_token, user_id, username } = json.data
         setAuth(access_token, username, user_id)
-        await fetchUserPermissions(access_token, user_id, username)
+        await refreshUserPermissions()
         setIsSuccess(true)
         setTimeout(() => {
           navigate('/home', { replace: true })
