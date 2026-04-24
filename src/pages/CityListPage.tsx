@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Table, Button, Modal, Form, Input, InputNumber, Alert, Space, message, Popconfirm, Flex, Typography,
+  Table, Button, Modal, Form, Input, InputNumber, Select, Alert, Space, message, Popconfirm, Flex, Typography,
 } from 'antd'
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, EnvironmentOutlined, ReloadOutlined,
@@ -10,6 +10,12 @@ import './CityListPage.scss'
 
 import { adminFetch, API_BASE } from '../utils/adminFetch'
 
+// 城市映射：10=北京 21=上海
+const CITY_OPTIONS: { value: string; label: string }[] = [
+  { value: '10', label: '北京' },
+  { value: '21', label: '上海' },
+]
+
 // ---- 1级商圈 ----
 interface CityItem {
   id: number
@@ -18,6 +24,7 @@ interface CityItem {
   description: string | null
   sort: number
   create_time: string | null
+  city?: string | number
 }
 
 // ---- 2级商圈（带 children） ----
@@ -53,6 +60,7 @@ function CityListPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [pageSize, setPageSize] = useState(10)
+  const [filterCity, setFilterCity] = useState<string | undefined>(undefined)
 
   // 1级弹窗
   const [showDialog1, setShowDialog1] = useState(false)
@@ -69,17 +77,23 @@ function CityListPage() {
 
   // ---- 数据加载 ----
 
-  const fetchCities = useCallback(async (page: number = 1, size?: number) => {
+  const fetchCities = useCallback(async (page: number = 1, size?: number, city?: string) => {
     const actualSize = size || pageSize
+    const actualCity = city !== undefined ? city : filterCity
     setLoading(true)
     setError('')
     try {
-      const res = await adminFetch(`${API_BASE}/admin/city/list?page=${page}&size=${actualSize}`)
+      const params = new URLSearchParams({ page: String(page), size: String(actualSize) })
+      if (actualCity) params.set('city', actualCity)
+      const res = await adminFetch(`${API_BASE}/admin/city/list?${params.toString()}`)
       const json: CityListResponse = await res.json()
       if (json.errno === 0) {
         setCities(json.data.data || [])
         setTotal(json.data.count)
         setCurrentPage(json.data.currentPage)
+        // 切换筛选后清空已展开的子列表缓存
+        setExpandedKeys([])
+        setChildrenMap({})
       } else {
         setError(json.errmsg || '请求失败')
       }
@@ -88,7 +102,7 @@ function CityListPage() {
     } finally {
       setLoading(false)
     }
-  }, [pageSize])
+  }, [pageSize, filterCity])
 
   const fetchChildren = useCallback(async (parentId: number) => {
     setChildLoading(parentId)
@@ -127,12 +141,15 @@ function CityListPage() {
   const openAdd1 = () => {
     setEditRecord1(null)
     form1.resetFields()
+    form1.setFieldsValue({ city: filterCity || CITY_OPTIONS[0].value, sort: 0 })
     setShowDialog1(true)
   }
 
   const openEdit1 = (record: CityItem) => {
     setEditRecord1(record)
+    const recordCity = record.city != null ? String(record.city) : filterCity
     form1.setFieldsValue({
+      city: recordCity,
       label: record.label,
       description: record.description || '',
       sort: record.sort,
@@ -145,6 +162,7 @@ function CityListPage() {
       const values = await form1.validateFields()
       setSubmitting1(true)
       const body: any = {
+        city: values.city,
         label: values.label?.trim(),
         description: values.description?.trim() || null,
         sort: values.sort ?? 0,
@@ -196,7 +214,7 @@ function CityListPage() {
       const values = await form2.validateFields()
       setSubmitting2(true)
       const body: any = {
-        parent_id: parentForChild!.id,
+        dictId: parentForChild!.id,
         label: values.label?.trim(),
         description: values.description?.trim() || null,
         sort: values.sort ?? 0,
@@ -225,20 +243,25 @@ function CityListPage() {
 
   // ---- 删除 ----
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number, parentId?: number) => {
     try {
       const res = await adminFetch(`${API_BASE}/admin/city/delete?id=${id}`)
       const json = await res.json()
       if (json.errno === 0) {
         message.success('删除成功')
-        fetchCities(currentPage)
-        // 清除缓存
-        setChildrenMap((prev) => {
-          const next = { ...prev }
-          delete next[id]
-          return next
-        })
-        setExpandedKeys((prev) => prev.filter((k) => k !== id))
+        if (parentId != null) {
+          // 删除的是二级：只刷新所属一级的子列表
+          fetchChildren(parentId)
+        } else {
+          fetchCities(currentPage)
+          // 清除缓存
+          setChildrenMap((prev) => {
+            const next = { ...prev }
+            delete next[id]
+            return next
+          })
+          setExpandedKeys((prev) => prev.filter((k) => k !== id))
+        }
       } else {
         message.error(json.errmsg || '删除失败')
       }
@@ -340,7 +363,7 @@ function CityListPage() {
       key: 'action',
       width: 160,
       align: 'center',
-      render: (_: unknown, record: CityItem, index: number) => {
+      render: (_: unknown, record: CityItem) => {
         // 从 expandedRows 获取 parent
         const parentId = record.parent_id
         const parent = cities.find((c) => c.id === parentId)
@@ -349,7 +372,7 @@ function CityListPage() {
             <Button type="link" size="small" icon={<EditOutlined />} onClick={() => parent && openEdit2(record, parent)}>
               编辑
             </Button>
-            <Popconfirm title="确认删除？" onConfirm={() => handleDelete(record.id)} okText="确认" cancelText="取消">
+            <Popconfirm title="确认删除？" onConfirm={() => handleDelete(record.id, parentId)} okText="确认" cancelText="取消">
               <Button type="link" size="small" danger icon={<DeleteOutlined />}>
                 删除
               </Button>
@@ -368,6 +391,17 @@ function CityListPage() {
           <Typography.Title level={4} style={{ margin: 0 }}>商圈列表</Typography.Title>
         </Flex>
         <Space>
+          <Select
+            placeholder="全部城市"
+            allowClear
+            style={{ width: 140 }}
+            value={filterCity}
+            onChange={(v) => {
+              setFilterCity(v)
+              fetchCities(1, undefined, v ?? '')
+            }}
+            options={CITY_OPTIONS}
+          />
           <Typography.Text type="secondary">共 {total} 个商圈区域</Typography.Text>
           <Button type="primary" icon={<PlusOutlined />} onClick={openAdd1}>
             新增区域
@@ -443,6 +477,9 @@ function CityListPage() {
         width={480}
       >
         <Form form={form1} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item label="所属城市" name="city" rules={[{ required: true, message: '请选择所属城市' }]}>
+            <Select placeholder="请选择城市" options={CITY_OPTIONS} />
+          </Form.Item>
           <Form.Item label="区域名称" name="label" rules={[{ required: true, message: '请输入区域名称' }]}>
             <Input placeholder="如：朝阳区" />
           </Form.Item>
