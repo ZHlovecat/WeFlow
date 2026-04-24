@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Table, Button, Modal, Form, Input, InputNumber, Select,
-  Alert, Space, message, Tag, Flex, Typography, Row, Col, Tooltip,
+  Table, Button, Modal, Form, Input, InputNumber, Select, Radio,
+  Alert, Space, message, Tag, Flex, Typography, Row, Col, Tooltip, Divider,
 } from 'antd'
 import {
   PlusOutlined, EditOutlined, SolutionOutlined,
@@ -10,16 +10,21 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 
 import { adminFetch, API_BASE } from '../utils/adminFetch'
+import './JobListPage.scss'
 
 interface JobItem {
   id: number
   job_title: string
   job_cate: number | null
   shop_id: number | null
-  edu: string | null
-  exp: string | null
-  gender: string | null
-  age: string | null
+  /** cert/exp 是从字典项 value 回写的冗余字段（0/1 等），真正的字典 id 存在 cert_id/exp_id */
+  cert: number | null
+  cert_id: number | null
+  exp: number | null
+  exp_id: number | null
+  gender: number | null
+  lower_age: string | number | null
+  upper_age: string | number | null
   lower_limit: string | null
   upper_limit: string | null
   desc: string | null
@@ -58,12 +63,20 @@ interface PageResponse<T> {
   }
 }
 
-/** gender 字典在后端可能为空，提供本地兜底，保持下拉可用 */
-const GENDER_FALLBACK: DictOption[] = [
-  { id: -1, label: '不限', value: '不限' },
-  { id: -2, label: '男', value: '男' },
-  { id: -3, label: '女', value: '女' },
+/**
+ * 性别不再走字典，直接按接口规范写死：男=1，女=2，不限=0
+ * 表单按钮文案按设计稿，表格列用精简文案
+ */
+const GENDER_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: '不限' },
+  { value: 1, label: '只要男性' },
+  { value: 2, label: '只要女性' },
 ]
+const GENDER_CODE_TO_LABEL: Record<number, string> = {
+  0: '不限',
+  1: '男',
+  2: '女',
+}
 
 function JobListPage() {
   const [jobs, setJobs] = useState<JobItem[]>([])
@@ -76,10 +89,8 @@ function JobListPage() {
   // 联调数据
   const [cates, setCates] = useState<JobCateOption[]>([])
   const [shops, setShops] = useState<ShopOption[]>([])
-  const [eduDict, setEduDict] = useState<DictOption[]>([])
+  const [certDict, setCertDict] = useState<DictOption[]>([])
   const [expDict, setExpDict] = useState<DictOption[]>([])
-  const [genderDict, setGenderDict] = useState<DictOption[]>(GENDER_FALLBACK)
-  const [ageDict, setAgeDict] = useState<DictOption[]>([])
 
   const [showDialog, setShowDialog] = useState(false)
   const [editRecord, setEditRecord] = useState<JobItem | null>(null)
@@ -136,35 +147,46 @@ function JobListPage() {
     }
   }, [])
 
-  const fetchDict = useCallback(async (type: string): Promise<DictOption[]> => {
+  /**
+   * 通过通用字典接口取二级字典项：
+   *  1) /admin/dict/list 拿所有一级字典，按 type 找到 dictId
+   *  2) /admin/dict/item?dictId=xxx 拿对应的二级字典项
+   */
+  const fetchAllDicts = useCallback(async () => {
     try {
-      const res = await adminFetch(`${API_BASE}/admin/dict/find?type=${encodeURIComponent(type)}`)
-      const json = await res.json()
-      if (json.errno === 0) return (json.data || []) as DictOption[]
+      const listRes = await adminFetch(`${API_BASE}/admin/dict/list?page=1&size=500`)
+      const listJson = await listRes.json()
+      if (listJson.errno !== 0) return
+      const allDicts: { id: number; type: string }[] = listJson.data?.data || []
+      const findId = (type: string) => allDicts.find((d) => d.type === type)?.id
+
+      const fetchItems = async (dictId?: number): Promise<DictOption[]> => {
+        if (dictId == null) return []
+        const res = await adminFetch(
+          `${API_BASE}/admin/dict/item?page=1&size=500&dictId=${dictId}`,
+        )
+        const json = await res.json()
+        if (json.errno === 0) return (json.data?.data || []) as DictOption[]
+        return []
+      }
+
+      const [cert, exp] = await Promise.all([
+        fetchItems(findId('cert')),
+        fetchItems(findId('exp')),
+      ])
+      setCertDict(cert)
+      setExpDict(exp)
     } catch {
       // ignore
     }
-    return []
   }, [])
 
   useEffect(() => {
     fetchJobs(1)
     fetchCates()
     fetchShops()
-    ;(async () => {
-      const [edu, exp, gender, age] = await Promise.all([
-        fetchDict('edu'),
-        fetchDict('exp'),
-        fetchDict('gender'),
-        fetchDict('age'),
-      ])
-      setEduDict(edu)
-      setExpDict(exp)
-      // gender 字典若为空，使用本地兜底，避免下拉无值
-      setGenderDict(gender.length ? gender : GENDER_FALLBACK)
-      setAgeDict(age)
-    })()
-  }, [fetchJobs, fetchCates, fetchShops, fetchDict])
+    fetchAllDicts()
+  }, [fetchJobs, fetchCates, fetchShops, fetchAllDicts])
 
   // ---- 新增/编辑 ----
 
@@ -180,6 +202,19 @@ function JobListPage() {
     return m
   }, [shops])
 
+  /** 表格里的字典 id → label 快查 */
+  const certMap = useMemo(() => {
+    const m: Record<number, string> = {}
+    certDict.forEach((d) => { m[d.id] = d.label })
+    return m
+  }, [certDict])
+
+  const expMap = useMemo(() => {
+    const m: Record<number, string> = {}
+    expDict.forEach((d) => { m[d.id] = d.label })
+    return m
+  }, [expDict])
+
   const openAdd = () => {
     setEditRecord(null)
     form.resetFields()
@@ -188,43 +223,88 @@ function JobListPage() {
 
   const openEdit = (record: JobItem) => {
     setEditRecord(record)
+    // cert/exp/gender 接口要求 integer，老数据里可能是中文字符串（如 "需要"/"男"），
+    // 只保留能转成合法数字的值，否则置空让用户重选，避免提交非整数导致后端 500
+    const toIntOrUndefined = (v: unknown): number | undefined => {
+      if (v == null || v === '') return undefined
+      const n = Number(v)
+      return Number.isFinite(n) ? n : undefined
+    }
+    const toFormNumber = (v: unknown): number | undefined => {
+      if (v == null || v === '') return undefined
+      const n = Number(v)
+      return Number.isFinite(n) ? n : undefined
+    }
     form.setFieldsValue({
       job_title: record.job_title || '',
       job_cate: record.job_cate ?? undefined,
       shop_id: record.shop_id ?? undefined,
-      edu: record.edu || undefined,
-      exp: record.exp || undefined,
-      gender: record.gender || undefined,
-      age: record.age || undefined,
-      lower_limit: record.lower_limit ? Number(record.lower_limit) : undefined,
-      upper_limit: record.upper_limit ? Number(record.upper_limit) : undefined,
+      // cert/exp 的 Radio.Group value 是字典项 id，回显用 cert_id/exp_id
+      cert: toIntOrUndefined(record.cert_id),
+      exp: toIntOrUndefined(record.exp_id),
+      gender: toIntOrUndefined(record.gender),
+      lower_age: toFormNumber(record.lower_age),
+      upper_age: toFormNumber(record.upper_age),
+      lower_limit: toFormNumber(record.lower_limit),
+      upper_limit: toFormNumber(record.upper_limit),
       desc: record.desc || '',
     })
     setShowDialog(true)
   }
 
   const handleSubmit = async () => {
+    let values: any
     try {
-      const values = await form.validateFields()
-      setSubmitting(true)
-      const body = new FormData()
-      body.append('job_title', String(values.job_title || '').trim())
-      body.append('job_cate', String(values.job_cate ?? ''))
-      body.append('shop_id', String(values.shop_id ?? ''))
-      body.append('edu', String(values.edu || ''))
-      body.append('exp', String(values.exp || ''))
-      body.append('gender', String(values.gender || ''))
-      body.append('age', String(values.age || ''))
-      body.append('lower_limit', values.lower_limit != null ? String(values.lower_limit) : '')
-      body.append('upper_limit', values.upper_limit != null ? String(values.upper_limit) : '')
-      body.append('desc', String(values.desc || ''))
-      if (editRecord) body.append('id', String(editRecord.id))
+      values = await form.validateFields()
+    } catch (err: any) {
+      // 校验失败：把第一条错误抛到 toast，避免 noStyle 嵌套下看不到红字
+      const firstMsg = err?.errorFields?.[0]?.errors?.[0]
+      message.error(firstMsg || '请检查表单必填项')
+      return
+    }
+    setSubmitting(true)
+    try {
+      // cert / exp / gender 必须是 int 类型，FormData 会把所有值变成 string，
+      // 所以这里改成 application/json 发送，保证数字字段到后端是真正的 number
+      const toInt = (v: unknown, fallback = 0): number => {
+        if (v == null || v === '') return fallback
+        const n = Number(v)
+        return Number.isFinite(n) ? Math.trunc(n) : fallback
+      }
+      const body: Record<string, unknown> = {
+        job_title: String(values.job_title || '').trim(),
+        job_cate: String(values.job_cate ?? ''),
+        shop_id: String(values.shop_id ?? ''),
+        cert: toInt(values.cert),
+        exp: toInt(values.exp),
+        gender: toInt(values.gender),
+        lower_age: values.lower_age != null ? String(values.lower_age) : '',
+        upper_age: values.upper_age != null ? String(values.upper_age) : '',
+        lower_limit: values.lower_limit != null ? String(values.lower_limit) : '',
+        upper_limit: values.upper_limit != null ? String(values.upper_limit) : '',
+        desc: String(values.desc || ''),
+      }
+      if (editRecord) body.id = editRecord.id
 
       const res = await adminFetch(`${API_BASE}/admin/jobs/put`, {
         method: 'POST',
-        body,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       })
-      const json = await res.json()
+      const text = await res.text()
+      let json: any = null
+      try {
+        json = JSON.parse(text)
+      } catch {
+        // 非 JSON（后端 5xx 错误页等）—— 把状态码和返回内容一起抛出来便于排查
+        console.error('[JobListPage] /admin/jobs/put non-JSON response:', {
+          status: res.status,
+          statusText: res.statusText,
+          body: text,
+        })
+        message.error(`服务端错误(${res.status})：${(text || res.statusText || '').slice(0, 120)}`)
+        return
+      }
       if (json.errno === 0) {
         message.success(editRecord ? '编辑成功' : '新增成功')
         setShowDialog(false)
@@ -232,8 +312,9 @@ function JobListPage() {
       } else {
         message.error(json.errmsg || '操作失败')
       }
-    } catch {
-      // validateFields 失败
+    } catch (e: any) {
+      console.error('[JobListPage] submit error:', e)
+      message.error(e?.message || '网络请求失败')
     } finally {
       setSubmitting(false)
     }
@@ -267,10 +348,43 @@ function JobListPage() {
       width: 160,
       render: (v: number | null, record) => record.shop_name || (v != null ? shopMap[v] : '') || '-',
     },
-    { title: '学历', dataIndex: 'edu', key: 'edu', width: 80, render: (v) => v || '-' },
-    { title: '经验', dataIndex: 'exp', key: 'exp', width: 100, render: (v) => v || '-' },
-    { title: '性别', dataIndex: 'gender', key: 'gender', width: 80, render: (v) => v || '-' },
-    { title: '年龄', dataIndex: 'age', key: 'age', width: 100, render: (v) => v || '-' },
+    {
+      title: '健康证',
+      dataIndex: 'cert_id',
+      key: 'cert_id',
+      width: 110,
+      render: (v: number | null) => (v != null ? (certMap[v] || '-') : '-'),
+    },
+    {
+      title: '经验',
+      dataIndex: 'exp_id',
+      key: 'exp_id',
+      width: 110,
+      render: (v: number | null) => (v != null ? (expMap[v] || '-') : '-'),
+    },
+    {
+      title: '性别',
+      dataIndex: 'gender',
+      key: 'gender',
+      width: 80,
+      render: (v: number | null) => {
+        if (v == null) return '-'
+        return GENDER_CODE_TO_LABEL[v] ?? '-'
+      },
+    },
+    {
+      title: '年龄范围',
+      key: 'age_range',
+      width: 120,
+      render: (_: unknown, record) => {
+        const lo = record.lower_age
+        const hi = record.upper_age
+        const hasLo = lo != null && lo !== ''
+        const hasHi = hi != null && hi !== ''
+        if (!hasLo && !hasHi) return '-'
+        return `${hasLo ? lo : '-'} ~ ${hasHi ? hi : '-'}`
+      },
+    },
     {
       title: '薪资范围',
       key: 'salary',
@@ -321,7 +435,7 @@ function JobListPage() {
   ]
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="job-list-page">
       <Flex justify="space-between" align="center" style={{ marginBottom: 20 }}>
         <Flex align="center" gap={10}>
           <SolutionOutlined style={{ fontSize: 22 }} />
@@ -384,114 +498,156 @@ function JobListPage() {
         width={720}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                label="职位名称"
-                name="job_title"
-                rules={[{ required: true, message: '请输入职位名称' }]}
-              >
-                <Input placeholder="请输入职位名称" maxLength={64} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                label="职位大类"
-                name="job_cate"
-                rules={[{ required: true, message: '请选择职位大类' }]}
-                extra={cates.length === 0 ? '请先到「系统配置维护 → 职位大类」中添加' : undefined}
-              >
-                <Select
-                  placeholder="请选择职位大类"
-                  showSearch
-                  optionFilterProp="label"
-                  options={cates
-                    .filter((c) => c.status === 0)
-                    .map((c) => ({ value: c.id, label: c.label }))}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                label="所属门店"
-                name="shop_id"
-                rules={[{ required: true, message: '请选择所属门店' }]}
-              >
-                <Select
-                  placeholder="请选择所属门店"
-                  showSearch
-                  optionFilterProp="label"
-                  options={shops.map((s) => ({ value: s.id, label: s.name || `门店 ${s.id}` }))}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="学历" name="edu">
-                <Select
-                  placeholder="请选择学历"
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  options={eduDict.map((d) => ({ value: d.label, label: d.label }))}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item label="经验" name="exp">
-                <Select
-                  placeholder="请选择经验要求"
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  options={expDict.map((d) => ({ value: d.label, label: d.label }))}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="性别" name="gender">
-                <Select
-                  placeholder="请选择性别"
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  options={genderDict.map((d) => ({ value: d.label, label: d.label }))}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="年龄" name="age">
-                <Select
-                  placeholder="请选择年龄"
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  options={ageDict.map((d) => ({ value: d.label, label: d.label }))}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item label="薪资下限" name="lower_limit">
-                <InputNumber min={0} style={{ width: '100%' }} placeholder="如 3000" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="薪资上限" name="upper_limit">
-                <InputNumber min={0} style={{ width: '100%' }} placeholder="如 6000" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item label="职位描述" name="desc">
+          {/* 基础信息 */}
+          <Form.Item
+            label="所属门店"
+            name="shop_id"
+            rules={[{ required: true, message: '请选择所属门店' }]}
+          >
+            <Select
+              placeholder="请选择所属门店"
+              showSearch
+              optionFilterProp="label"
+              options={shops.map((s) => ({ value: s.id, label: s.name || `门店 ${s.id}` }))}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="职位名称"
+            name="job_title"
+            rules={[{ required: true, message: '请输入职位名称' }]}
+          >
+            <Input placeholder="请输入职位名称" maxLength={64} />
+          </Form.Item>
+
+          <Form.Item
+            label="职位大类"
+            name="job_cate"
+            rules={[{ required: true, message: '请选择职位大类' }]}
+            extra={cates.length === 0 ? '请先到「系统配置维护 → 职位大类」中添加' : undefined}
+          >
+            <Select
+              placeholder="请选择职位大类"
+              showSearch
+              optionFilterProp="label"
+              options={cates
+                .filter((c) => c.status === 0)
+                .map((c) => ({ value: c.id, label: c.label }))}
+            />
+          </Form.Item>
+
+          <Form.Item label="薪资区间" required style={{ marginBottom: 24 }}>
+            <Row gutter={12} align="middle">
+              <Col flex="1 1 0">
+                <Form.Item
+                  name="lower_limit"
+                  noStyle
+                  rules={[{ required: true, message: '请输入薪资下限' }]}
+                >
+                  <InputNumber min={0} style={{ width: '100%' }} placeholder="下限，如 3000" />
+                </Form.Item>
+              </Col>
+              <Col flex="0 0 auto" style={{ textAlign: 'center', color: 'var(--text-secondary, #999)' }}>—</Col>
+              <Col flex="1 1 0">
+                <Form.Item
+                  name="upper_limit"
+                  noStyle
+                  rules={[
+                    { required: true, message: '请输入薪资上限' },
+                    {
+                      validator: (_, v) => {
+                        if (v == null || v === '') return Promise.resolve()
+                        const lower = form.getFieldValue('lower_limit')
+                        if (lower != null && lower !== '' && Number(v) < Number(lower)) {
+                          return Promise.reject(new Error('薪资上限不能小于下限'))
+                        }
+                        return Promise.resolve()
+                      },
+                    },
+                  ]}
+                >
+                  <InputNumber min={0} style={{ width: '100%' }} placeholder="上限，如 6000" />
+                </Form.Item>
+              </Col>
+            </Row>
+          </Form.Item>
+
+          <Form.Item label="岗位描述" name="desc">
             <Input.TextArea
-              placeholder="可选，填写岗位职责与任职要求"
-              rows={6}
+              placeholder="选填，填写岗位职责与任职要求"
+              rows={5}
               maxLength={4000}
               showCount
+            />
+          </Form.Item>
+
+          <Divider style={{ margin: '8px 0 20px' }} />
+
+          {/* 要求信息 */}
+          <Form.Item
+            label="经验要求"
+            name="exp"
+            rules={[{ required: true, message: '请选择经验要求' }]}
+            extra={expDict.length === 0 ? '请先到「系统配置维护 → 通用字典」中添加 type=exp 的字典项' : undefined}
+          >
+            <Radio.Group
+              optionType="button"
+              options={expDict.map((d) => ({ value: d.id, label: d.label }))}
+            />
+          </Form.Item>
+
+          <Form.Item label="性别要求" name="gender">
+            <Radio.Group
+              optionType="button"
+              options={GENDER_OPTIONS}
+            />
+          </Form.Item>
+
+          <Form.Item label="年龄要求" required style={{ marginBottom: 24 }}>
+            <Row gutter={12} align="middle">
+              <Col flex="1 1 0">
+                <Form.Item
+                  name="lower_age"
+                  noStyle
+                  rules={[
+                    { required: true, message: '请输入年龄下限' },
+                    {
+                      validator: (_, v) => {
+                        if (v == null || v === '') return Promise.resolve()
+                        const upper = form.getFieldValue('upper_age')
+                        if (upper != null && upper !== '' && Number(v) > Number(upper)) {
+                          return Promise.reject(new Error('年龄下限不能大于上限'))
+                        }
+                        return Promise.resolve()
+                      },
+                    },
+                  ]}
+                >
+                  <InputNumber min={16} max={65} style={{ width: '100%' }} placeholder="16" />
+                </Form.Item>
+              </Col>
+              <Col flex="0 0 auto" style={{ textAlign: 'center', color: 'var(--text-secondary, #999)' }}>—</Col>
+              <Col flex="1 1 0">
+                <Form.Item
+                  name="upper_age"
+                  noStyle
+                  rules={[{ required: true, message: '请输入年龄上限' }]}
+                >
+                  <InputNumber min={16} max={65} style={{ width: '100%' }} placeholder="65" />
+                </Form.Item>
+              </Col>
+            </Row>
+          </Form.Item>
+
+          <Form.Item
+            label="健康证要求"
+            name="cert"
+            rules={[{ required: true, message: '请选择健康证要求' }]}
+            extra={certDict.length === 0 ? '请先到「系统配置维护 → 通用字典」中添加 type=cert 的字典项' : undefined}
+          >
+            <Radio.Group
+              optionType="button"
+              options={certDict.map((d) => ({ value: d.id, label: d.label }))}
             />
           </Form.Item>
         </Form>

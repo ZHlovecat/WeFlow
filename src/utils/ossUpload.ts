@@ -77,7 +77,7 @@ function dataToTosForm(data: Record<string, unknown>): {
   }
 }
 
-async function getUploadSignature(type: 'company' | 'shop') {
+async function getUploadSignature(type: 'company' | 'shop' | 'avatar') {
   const res = await adminFetch(`${API_BASE}/admin/auth/getOssSignature?type=${type}`)
   const json = (await res.json()) as SignatureResponse
   if (json.errno !== 0) {
@@ -98,7 +98,7 @@ function buildPublicUrl(host: string, dir: string): string {
 /**
  * 使用 getOssSignature 返回的火山 TOS 字段做 PostObject 上传；最终 URL 仍为 host + '/' + dir。
  */
-export async function uploadImageToOss(file: File, type: 'company' | 'shop'): Promise<string> {
+export async function uploadImageToOss(file: File, type: 'company' | 'shop' | 'avatar'): Promise<string> {
   const s = await getUploadSignature(type)
 
   const formData = new FormData()

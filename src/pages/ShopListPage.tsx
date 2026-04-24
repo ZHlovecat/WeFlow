@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  Table, Button, Modal, Form, Input, InputNumber, Select, Cascader,
+  Table, Button, Modal, Form, Input, Select, Cascader,
   Alert, Space, message, Popconfirm, Tag, Upload, Image, Flex, Typography,
+  Divider,
 } from 'antd'
+import type { InputRef } from 'antd'
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, UploadOutlined,
-  LoadingOutlined, PictureOutlined, GiftOutlined, ClockCircleOutlined,
-  EnvironmentOutlined, ShopOutlined, ReloadOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined,
+  LoadingOutlined, EnvironmentOutlined, ShopOutlined, ReloadOutlined,
+  CheckCircleFilled, EyeOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { uploadImageToOss } from '../utils/ossUpload'
@@ -14,6 +16,44 @@ import './ShopListPage.scss'
 
 import { adminFetch, API_BASE } from '../utils/adminFetch'
 const TENCENT_MAP_KEY = 'MMTBZ-FFMCL-SY6PC-E5SVR-BNGDH-7VFLU'
+
+// 店长头像裁剪至指定正方形尺寸
+async function resizeAvatarToSquare(file: File, size: number): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new window.Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const canvas = document.createElement('canvas')
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        reject(new Error('Canvas 不可用'))
+        return
+      }
+      const side = Math.min(img.width, img.height)
+      const sx = (img.width - side) / 2
+      const sy = (img.height - side) / 2
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size)
+      const isJpeg = file.type === 'image/jpeg' || file.type === 'image/jpg'
+      const mime = isJpeg ? 'image/jpeg' : 'image/png'
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('图片处理失败'))
+          return
+        }
+        const ext = isJpeg ? 'jpg' : 'png'
+        resolve(new File([blob], `avatar_${Date.now()}.${ext}`, { type: mime }))
+      }, mime, 0.92)
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('图片加载失败'))
+    }
+    img.src = url
+  })
+}
 
 // ---- JSONP 工具 ----
 function jsonp(url: string, params: Record<string, string>): Promise<any> {
@@ -114,6 +154,13 @@ interface BenefitItem {
   shop_id: number
 }
 
+interface CompanyBenefit {
+  id: number
+  label: string
+  sort?: number
+  company_id?: number
+}
+
 interface TimeItem {
   id: number
   label: string
@@ -146,8 +193,16 @@ interface PageResponse<T> {
   }
 }
 
+interface ManagerItem {
+  id: number
+  name: string | null
+  avatar: string | null
+  phone: string | null
+  shop_id: number | null
+}
+
 const STATUS_MAP: Record<number, { text: string; color: string }> = {
-  0: { text: '正常', color: 'green' },
+  0: { text: '启用', color: 'green' },
   1: { text: '已关闭', color: 'red' },
 }
 
@@ -164,31 +219,33 @@ function ShopListPage() {
   const [cascaderOptions, setCascaderOptions] = useState<CascaderOption[]>([])
   const [allTimes, setAllTimes] = useState<TimeItem[]>([])
 
-  // 编辑弹窗
+  // 编辑/新增弹窗
   const [showEdit, setShowEdit] = useState(false)
   const [editRecord, setEditRecord] = useState<ShopItem | null>(null)
   const [editLoading, setEditLoading] = useState(false)
   const [editForm] = Form.useForm()
-  // 图片管理弹窗
-  const [showImg, setShowImg] = useState(false)
-  const [imgShopId, setImgShopId] = useState<number>(0)
-  const [imgList, setImgList] = useState<ShopImg[]>([])
-  const [imgLoading, setImgLoading] = useState(false)
-  const [imgUploading, setImgUploading] = useState(false)
 
-  // 福利管理弹窗
-  const [showBenefits, setShowBenefits] = useState(false)
-  const [benefitShopId, setBenefitShopId] = useState<number>(0)
-  const [benefits, setBenefits] = useState<BenefitItem[]>([])
-  const [benefitLoading, setBenefitLoading] = useState(false)
-  const [addBenefitVisible, setAddBenefitVisible] = useState(false)
-  const [benefitForm] = Form.useForm()
+  // 店长（关联店长列表数据）
+  const [editManager, setEditManager] = useState<ManagerItem | null>(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
 
-  // 时间配置弹窗
-  const [showTimeConfig, setShowTimeConfig] = useState(false)
-  const [timeConfigShopId, setTimeConfigShopId] = useState<number>(0)
+  // 相关照片（内联）
+  const [shopImages, setShopImages] = useState<ShopImg[]>([])
+  const [imagesLoading, setImagesLoading] = useState(false)
+  const [imageUploading, setImageUploading] = useState(false)
+  const [imageDeletingId, setImageDeletingId] = useState<number | null>(null)
+
+  // 门店福利 + 企业福利（只读提示）
+  const [shopBenefits, setShopBenefits] = useState<BenefitItem[]>([])
+  const [benefitsLoading, setBenefitsLoading] = useState(false)
+  const [benefitAdding, setBenefitAdding] = useState(false)
+  const [benefitInputVisible, setBenefitInputVisible] = useState(false)
+  const [benefitInputValue, setBenefitInputValue] = useState('')
+  const benefitInputRef = useRef<InputRef>(null)
+  const [companyBenefits, setCompanyBenefits] = useState<CompanyBenefit[]>([])
+
+  // 面试时间（内联）
   const [selectedTimes, setSelectedTimes] = useState<number[]>([])
-  const [timeConfigLoading, setTimeConfigLoading] = useState(false)
 
   const isAddMode = !editRecord
 
@@ -244,7 +301,94 @@ function ShopListPage() {
     loadDropdownData()
   }, [fetchShops, loadDropdownData])
 
-  // ---- 新增/编辑门店 ----
+  // ---- 子项加载（编辑模式） ----
+
+  const loadShopManager = async (shopId: number) => {
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/shop/managerList?shop_id=${shopId}&page=1&size=10`)
+      const json: PageResponse<ManagerItem> = await res.json()
+      if (json.errno === 0) {
+        const manager = (json.data?.data || [])[0] || null
+        setEditManager(manager)
+        editForm.setFieldsValue({
+          manager_name: manager?.name || '',
+          manager_phone: manager?.phone || '',
+        })
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const loadShopImages = async (shopId: number) => {
+    setImagesLoading(true)
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/shop/imgList?shop_id=${shopId}`)
+      const json = await res.json()
+      if (json.errno === 0) {
+        const list: ShopImg[] = Array.isArray(json.data)
+          ? json.data
+          : (json.data?.data || [])
+        list.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
+        setShopImages(list)
+      }
+    } catch {
+      // ignore
+    } finally {
+      setImagesLoading(false)
+    }
+  }
+
+  const loadShopBenefits = async (shopId: number) => {
+    setBenefitsLoading(true)
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/benefits/list?shop_id=${shopId}`)
+      const json = await res.json()
+      if (json.errno === 0) {
+        const list: BenefitItem[] = Array.isArray(json.data)
+          ? json.data
+          : (json.data?.data || [])
+        list.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
+        setShopBenefits(list)
+      }
+    } catch {
+      // ignore
+    } finally {
+      setBenefitsLoading(false)
+    }
+  }
+
+  const loadShopTime = async (shopId: number) => {
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/time/shopTime?shop_id=${shopId}`)
+      const json = await res.json()
+      if (json.errno === 0) {
+        const selected = (json.data || [])
+          .filter((t: TimeItem) => t.selected)
+          .map((t: TimeItem) => t.id)
+        setSelectedTimes(selected)
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const loadCompanyBenefits = async (companyId: number) => {
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/benefits/listCompany?company_id=${companyId}`)
+      const json = await res.json()
+      if (json.errno === 0) {
+        const list: CompanyBenefit[] = Array.isArray(json.data)
+          ? json.data
+          : (json.data?.data || [])
+        setCompanyBenefits(list)
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // ---- 打开/关闭弹窗 ----
 
   const openEdit = (record: ShopItem) => {
     setEditRecord(record)
@@ -256,50 +400,286 @@ function ShopListPage() {
       lat: record.lat,
       district_id: (record.district_id && record.district_id.length > 0) ? record.district_id : undefined,
       status: record.status ?? 0,
-      time: record.time ? record.time.split(',').map(Number) : [],
+      manager_name: '',
+      manager_phone: '',
     })
     setShowEdit(true)
+    if (record.id) {
+      loadShopManager(record.id)
+      loadShopImages(record.id)
+      loadShopBenefits(record.id)
+      loadShopTime(record.id)
+    }
+    if (record.company_id) {
+      loadCompanyBenefits(record.company_id)
+    }
   }
 
   const openAdd = () => {
     setEditRecord(null)
     editForm.resetFields()
+    editForm.setFieldsValue({ status: 0 })
+    setEditManager(null)
+    setShopImages([])
+    setShopBenefits([])
+    setCompanyBenefits([])
+    setSelectedTimes([])
     setShowEdit(true)
+  }
+
+  const closeEdit = () => {
+    setShowEdit(false)
+    setEditRecord(null)
+    setEditManager(null)
+    setShopImages([])
+    setShopBenefits([])
+    setCompanyBenefits([])
+    setSelectedTimes([])
+    setBenefitInputVisible(false)
+    setBenefitInputValue('')
+  }
+
+  // ---- 保存 ----
+
+  const saveShopBasic = async (values: any): Promise<number | null> => {
+    const body: any = {
+      name: values.name?.trim(),
+      company_id: values.company_id,
+      address: values.address?.trim() || null,
+      lng: values.lng ?? null,
+      lat: values.lat ?? null,
+      district: values.district_id?.length ? values.district_id : null,
+      status: values.status ?? 0,
+      time: selectedTimes.length ? selectedTimes.join(',') : null,
+    }
+    if (editRecord) body.id = editRecord.id
+
+    const res = await adminFetch(`${API_BASE}/admin/shop/put`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const json = await res.json()
+    if (json.errno !== 0) {
+      throw new Error(json.errmsg || '保存门店失败')
+    }
+    if (editRecord) return editRecord.id
+    const newId = json.data?.id ?? json.data?.data?.id ?? null
+    return typeof newId === 'number' ? newId : null
+  }
+
+  const saveManager = async (shopId: number, values: any) => {
+    const name = (values.manager_name || '').trim()
+    const phone = (values.manager_phone || '').trim()
+    const avatar = editManager?.avatar || ''
+    // 无任何店长信息时跳过保存
+    if (!name && !phone && !avatar && !editManager?.id) return
+
+    const body = new FormData()
+    body.append('name', name)
+    body.append('phone', phone)
+    body.append('shop_id', String(shopId))
+    body.append('avatar', avatar)
+    if (editManager?.id) body.append('id', String(editManager.id))
+
+    const res = await adminFetch(`${API_BASE}/admin/shop/managerPut`, {
+      method: 'POST',
+      body,
+    })
+    const json = await res.json()
+    if (json.errno !== 0) {
+      throw new Error(json.errmsg || '保存店长失败')
+    }
   }
 
   const handleEditSubmit = async () => {
     try {
       const values = await editForm.validateFields()
       setEditLoading(true)
-      const body: any = {
-        name: values.name?.trim(),
-        company_id: values.company_id,
-        address: values.address?.trim() || null,
-        lng: values.lng ?? null,
-        lat: values.lat ?? null,
-        district: values.district_id?.length ? values.district_id : null,
-        status: values.status ?? 0,
-        time: values.time ? values.time.join(',') : null,
+      const shopId = await saveShopBasic(values)
+      if (shopId) {
+        try {
+          await saveManager(shopId, values)
+        } catch (e: any) {
+          message.warning('门店已保存，但店长信息保存失败：' + (e?.message || '未知错误'))
+          closeEdit()
+          fetchShops(currentPage)
+          return
+        }
       }
-      if (editRecord) body.id = editRecord.id
+      message.success(editRecord ? '保存成功' : '新增成功')
+      closeEdit()
+      fetchShops(currentPage)
+    } catch (e: any) {
+      if (e?.errorFields) return // validateFields 失败
+      message.error(e?.message || '保存失败')
+    } finally {
+      setEditLoading(false)
+    }
+  }
 
-      const res = await adminFetch(`${API_BASE}/admin/shop/put`, {
+  // ---- 头像上传 ----
+
+  const handleAvatarUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      message.error('请选择图片文件')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      message.error('图片大小不能超过 5MB')
+      return
+    }
+    setAvatarUploading(true)
+    try {
+      const resized = await resizeAvatarToSquare(file, 200)
+      const url = await uploadImageToOss(resized, 'avatar')
+      setEditManager((prev) =>
+        prev
+          ? { ...prev, avatar: url }
+          : { id: 0, name: null, avatar: url, phone: null, shop_id: null }
+      )
+    } catch (err: any) {
+      message.error('头像上传失败：' + (err.message || '未知错误'))
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
+  // ---- 门店状态关闭二次确认 ----
+
+  const handleStatusChange = (v: number) => {
+    if (v === 1) {
+      Modal.confirm({
+        title: '确认关闭门店？',
+        content: '关闭后该门店将无法在小程序端被查询到，确定继续？',
+        okText: '确认关闭',
+        cancelText: '取消',
+        okButtonProps: { danger: true },
+        onOk: () => editForm.setFieldsValue({ status: 1 }),
+        onCancel: () => editForm.setFieldsValue({ status: 0 }),
+      })
+    } else {
+      editForm.setFieldsValue({ status: v })
+    }
+  }
+
+  // ---- 相关照片（内联操作） ----
+
+  const handleShopImageUpload = async (file: File) => {
+    if (!editRecord) return
+    if (!file.type.startsWith('image/')) {
+      message.error('请选择图片文件')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      message.error('图片大小不能超过 5MB')
+      return
+    }
+    if (shopImages.length >= 16) {
+      message.error('最多只能上传 16 张照片')
+      return
+    }
+    setImageUploading(true)
+    try {
+      const url = await uploadImageToOss(file, 'shop')
+      const res = await adminFetch(`${API_BASE}/admin/shop/imgPut`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ shop_id: editRecord.id, url }),
       })
       const json = await res.json()
       if (json.errno === 0) {
-        message.success(editRecord ? '编辑成功' : '新增成功')
-        setShowEdit(false)
-        fetchShops(currentPage)
+        message.success('上传成功')
+        loadShopImages(editRecord.id)
       } else {
-        message.error(json.errmsg || '操作失败')
+        message.error(json.errmsg || '保存失败')
+      }
+    } catch (err: any) {
+      message.error('上传失败：' + (err.message || '未知错误'))
+    } finally {
+      setImageUploading(false)
+    }
+  }
+
+  const handleShopImageDelete = async (imgId: number) => {
+    if (!editRecord) return
+    setImageDeletingId(imgId)
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/shop/imgDel?id=${imgId}`)
+      const json = await res.json()
+      if (json.errno === 0) {
+        message.success('删除成功')
+        loadShopImages(editRecord.id)
+      } else {
+        message.error(json.errmsg || '删除失败')
       }
     } catch {
-      // validateFields 失败
+      message.error('删除请求失败')
     } finally {
-      setEditLoading(false)
+      setImageDeletingId(null)
+    }
+  }
+
+  // ---- 门店福利（内联操作） ----
+
+  const handleAddShopBenefit = async () => {
+    if (!editRecord) return
+    const label = benefitInputValue.trim()
+    if (!label) {
+      setBenefitInputVisible(false)
+      setBenefitInputValue('')
+      return
+    }
+    if (label.length < 2 || label.length > 8) {
+      message.error('标签长度 2-8 个字符')
+      return
+    }
+    if (shopBenefits.length >= 8) {
+      message.error('最多只能添加 8 个福利标签')
+      setBenefitInputVisible(false)
+      setBenefitInputValue('')
+      return
+    }
+    setBenefitAdding(true)
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/benefits/put`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shop_id: editRecord.id,
+          label,
+          sort: shopBenefits.length,
+        }),
+      })
+      const json = await res.json()
+      if (json.errno === 0) {
+        message.success('添加成功')
+        setBenefitInputVisible(false)
+        setBenefitInputValue('')
+        loadShopBenefits(editRecord.id)
+      } else {
+        message.error(json.errmsg || '添加失败')
+      }
+    } catch (e: any) {
+      message.error(e?.message || '网络请求失败')
+    } finally {
+      setBenefitAdding(false)
+    }
+  }
+
+  const handleDeleteShopBenefit = async (id: number) => {
+    if (!editRecord) return
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/benefits/del?id=${id}`)
+      const json = await res.json()
+      if (json.errno === 0) {
+        message.success('删除成功')
+        loadShopBenefits(editRecord.id)
+      } else {
+        message.error(json.errmsg || '删除失败')
+      }
+    } catch {
+      message.error('删除请求失败')
     }
   }
 
@@ -312,7 +692,6 @@ function ShopListPage() {
   const [pickedLng, setPickedLng] = useState<number | null>(null)
   const [pickedLat, setPickedLat] = useState<number | null>(null)
 
-  // 加载腾讯地图 JS SDK
   const loadTencentMap = useCallback(() => {
     return new Promise<void>((resolve, reject) => {
       if ((window as any).TMap) {
@@ -337,20 +716,18 @@ function ShopListPage() {
     try {
       await loadTencentMap()
       setMapReady(true)
-      // 等待 DOM 渲染
       setTimeout(() => {
         if (!mapRef.current || !(window as any).TMap) return
         const TMap = (window as any).TMap
         const center = curLng && curLat
           ? new TMap.LatLng(curLat, curLng)
-          : new TMap.LatLng(39.984104, 116.307503) // 默认北京
+          : new TMap.LatLng(39.984104, 116.307503)
         const map = new TMap.Map(mapRef.current, {
           center,
           zoom: 13,
         })
         mapInstanceRef.current = map
 
-        // 如果已有坐标，添加 marker
         if (curLng && curLat) {
           const marker = new TMap.MultiMarker({
             map,
@@ -362,12 +739,10 @@ function ShopListPage() {
           markerRef.current = marker
         }
 
-        // 点击地图获取坐标
         map.on('click', (evt: any) => {
           const { lat, lng } = evt.latLng
           setPickedLat(lat)
           setPickedLng(lng)
-          // 更新 marker
           if (markerRef.current) {
             markerRef.current.setGeometries([{
               id: 'picked',
@@ -420,14 +795,11 @@ function ShopListPage() {
 
   const handleMapInputChange = (value: string) => {
     setMapSearchText(value)
-    // 清除之前的定时器
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-    // 清空时隐藏候选
     if (!value.trim()) {
       setSuggestions([])
       return
     }
-    // 防抖 300ms 后请求
     searchTimerRef.current = setTimeout(async () => {
       try {
         const list = await searchPlaceSuggestions(value.trim())
@@ -465,177 +837,6 @@ function ShopListPage() {
     }
   }
 
-  // ---- 图片管理 ----
-
-  const openImgManager = async (shopId: number) => {
-    setImgShopId(shopId)
-    setShowImg(true)
-    setImgLoading(true)
-    try {
-      const res = await adminFetch(`${API_BASE}/admin/shop/imgList?shop_id=${shopId}`)
-      const json = await res.json()
-      if (json.errno === 0) {
-        setImgList(json.data || [])
-      }
-    } catch {
-      message.error('加载图片失败')
-    } finally {
-      setImgLoading(false)
-    }
-  }
-
-  const handleImgUpload = async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      message.error('请选择图片文件')
-      return
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      message.error('图片大小不能超过 5MB')
-      return
-    }
-    setImgUploading(true)
-    try {
-      const url = await uploadImageToOss(file, 'shop')
-      await adminFetch(`${API_BASE}/admin/shop/imgPut`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shop_id: imgShopId, url }),
-      })
-      message.success('上传成功')
-      openImgManager(imgShopId)
-    } catch (err: any) {
-      message.error('上传失败：' + (err.message || '未知错误'))
-    } finally {
-      setImgUploading(false)
-    }
-  }
-
-  const handleImgDelete = async (imgId: number) => {
-    try {
-      const res = await adminFetch(`${API_BASE}/admin/shop/imgDel?id=${imgId}`)
-      const json = await res.json()
-      if (json.errno === 0) {
-        message.success('删除成功')
-        openImgManager(imgShopId)
-      } else {
-        message.error(json.errmsg || '删除失败')
-      }
-    } catch {
-      message.error('删除请求失败')
-    }
-  }
-
-  // ---- 福利管理 ----
-
-  const openBenefitManager = async (shopId: number) => {
-    setBenefitShopId(shopId)
-    setShowBenefits(true)
-    setBenefitLoading(true)
-    try {
-      const res = await adminFetch(`${API_BASE}/admin/benefits/list?shop_id=${shopId}`)
-      const json = await res.json()
-      if (json.errno === 0) {
-        setBenefits(json.data || [])
-      }
-    } catch {
-      message.error('加载福利列表失败')
-    } finally {
-      setBenefitLoading(false)
-    }
-  }
-
-  const handleAddBenefit = async () => {
-    try {
-      const values = await benefitForm.validateFields()
-      setBenefitLoading(true)
-      const res = await adminFetch(`${API_BASE}/admin/benefits/put`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shop_id: benefitShopId,
-          label: values.label?.trim(),
-          sort: values.sort ?? 0,
-        }),
-      })
-      const json = await res.json()
-      if (json.errno === 0) {
-        message.success('添加成功')
-        setAddBenefitVisible(false)
-        benefitForm.resetFields()
-        openBenefitManager(benefitShopId)
-      } else {
-        message.error(json.errmsg || '添加失败')
-      }
-    } catch {
-      // validateFields 失败
-    } finally {
-      setBenefitLoading(false)
-    }
-  }
-
-  const handleDeleteBenefit = async (id: number) => {
-    try {
-      const res = await adminFetch(`${API_BASE}/admin/benefits/del?id=${id}`)
-      const json = await res.json()
-      if (json.errno === 0) {
-        message.success('删除成功')
-        openBenefitManager(benefitShopId)
-      } else {
-        message.error(json.errmsg || '删除失败')
-      }
-    } catch {
-      message.error('删除请求失败')
-    }
-  }
-
-  // ---- 时间配置 ----
-
-  const openTimeConfig = async (shopId: number) => {
-    setTimeConfigShopId(shopId)
-    setTimeConfigLoading(true)
-    setShowTimeConfig(true)
-    try {
-      const res = await adminFetch(`${API_BASE}/admin/time/shopTime?shop_id=${shopId}`)
-      const json = await res.json()
-      if (json.errno === 0) {
-        const selected = (json.data || [])
-          .filter((t: TimeItem) => t.selected)
-          .map((t: TimeItem) => t.id)
-        setSelectedTimes(selected)
-      }
-    } catch {
-      message.error('加载时间配置失败')
-    } finally {
-      setTimeConfigLoading(false)
-    }
-  }
-
-  const handleSaveTimeConfig = async () => {
-    setTimeConfigLoading(true)
-    try {
-      const res = await adminFetch(`${API_BASE}/admin/shop/put`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: timeConfigShopId,
-          time: selectedTimes.join(','),
-        }),
-      })
-      const json = await res.json()
-      if (json.errno === 0) {
-        message.success('时间配置已保存')
-        setShowTimeConfig(false)
-        fetchShops(currentPage)
-      } else {
-        message.error(json.errmsg || '保存失败')
-      }
-    } catch {
-      message.error('保存请求失败')
-    } finally {
-      setTimeConfigLoading(false)
-    }
-  }
-
   // ---- 表格列 ----
 
   const cascaderData = cascaderOptions.map((city) => ({
@@ -664,7 +865,7 @@ function ShopListPage() {
       render: (v: string | null) => v || <span style={{ color: '#999' }}>未填写</span>,
     },
     {
-      title: '所属公司',
+      title: '所属企业',
       dataIndex: 'company_name',
       key: 'company_name',
       width: 160,
@@ -685,7 +886,7 @@ function ShopListPage() {
       render: (v: string | null) => v || '-',
     },
     {
-      title: '负责人',
+      title: '店长',
       dataIndex: 'manager_name',
       key: 'manager_name',
       width: 90,
@@ -712,24 +913,13 @@ function ShopListPage() {
     {
       title: '操作',
       key: 'action',
-      width: 280,
+      width: 100,
       fixed: 'right',
       align: 'center',
       render: (_: unknown, record: ShopItem) => (
-        <Space size="small" wrap>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(record)}>
-            编辑
-          </Button>
-          <Button type="link" size="small" icon={<PictureOutlined />} onClick={() => openImgManager(record.id)}>
-            图片
-          </Button>
-          <Button type="link" size="small" icon={<GiftOutlined />} onClick={() => openBenefitManager(record.id)}>
-            福利
-          </Button>
-          <Button type="link" size="small" icon={<ClockCircleOutlined />} onClick={() => openTimeConfig(record.id)}>
-            时间
-          </Button>
-        </Space>
+        <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(record)}>
+          编辑
+        </Button>
       ),
     },
   ]
@@ -739,6 +929,203 @@ function ShopListPage() {
     { type: 2, label: '下午', times: allTimes.filter((t) => t.type === 2) },
     { type: 3, label: '晚上', times: allTimes.filter((t) => t.type === 3) },
   ]
+
+  // ---- 内联 UI 片段 ----
+
+  const renderAvatarLabel = () => (
+    <Space size={10} align="center">
+      <span>店长头像</span>
+      <Upload
+        showUploadList={false}
+        beforeUpload={(file) => { handleAvatarUpload(file); return false }}
+        accept="image/*"
+        disabled={avatarUploading}
+      >
+        <a className={avatarUploading ? 'shop-upload-link disabled' : 'shop-upload-link'}>
+          {avatarUploading ? <><LoadingOutlined /> 上传中</> : '上传'}
+        </a>
+      </Upload>
+    </Space>
+  )
+
+  const renderAvatarBox = () => (
+    <div className="shop-avatar-box">
+      {editManager?.avatar ? (
+        <Image
+          src={editManager.avatar}
+          alt="店长头像"
+          preview={{
+            mask: <span><EyeOutlined style={{ marginInlineEnd: 4 }} /> 预览</span>,
+          }}
+        />
+      ) : (
+        <div className="shop-avatar-empty" />
+      )}
+    </div>
+  )
+
+  const renderBenefitsLabel = () => (
+    <Flex align="center" gap={12} wrap="wrap">
+      <span>门店福利标签</span>
+      {companyBenefits.length > 0 && (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          已有企业福利：{companyBenefits.map((b) => b.label).join('、')}
+        </Typography.Text>
+      )}
+    </Flex>
+  )
+
+  const renderBenefitsArea = () => (
+    <div className="shop-benefits-area">
+      <Space size={[8, 8]} wrap>
+        {shopBenefits.map((b) => (
+          <Tag
+            key={b.id}
+            closable
+            onClose={(e) => {
+              e.preventDefault()
+              handleDeleteShopBenefit(b.id)
+            }}
+            style={{ padding: '4px 10px', fontSize: 13, margin: 0 }}
+          >
+            {b.label}
+          </Tag>
+        ))}
+        {benefitInputVisible ? (
+          <Input
+            ref={benefitInputRef}
+            type="text"
+            size="small"
+            style={{ width: 120 }}
+            value={benefitInputValue}
+            maxLength={8}
+            onChange={(e) => setBenefitInputValue(e.target.value)}
+            onBlur={handleAddShopBenefit}
+            onPressEnter={handleAddShopBenefit}
+            disabled={benefitAdding}
+            placeholder="2-8 字符"
+          />
+        ) : shopBenefits.length < 8 ? (
+          <Tag
+            onClick={() => {
+              setBenefitInputVisible(true)
+              setTimeout(() => benefitInputRef.current?.focus(), 0)
+            }}
+            style={{
+              cursor: 'pointer',
+              padding: '4px 10px',
+              fontSize: 13,
+              borderStyle: 'dashed',
+              background: 'transparent',
+              margin: 0,
+            }}
+          >
+            <PlusOutlined /> 新增
+          </Tag>
+        ) : null}
+      </Space>
+      <div className="shop-field-hint">
+        {benefitsLoading ? '加载中...' : `已添加 ${shopBenefits.length} / 8，单个标签 2-8 字符`}
+      </div>
+    </div>
+  )
+
+  const renderImagesLabel = () => (
+    <Space size={10} align="center">
+      <span>相关照片</span>
+      {!!editRecord && shopImages.length < 16 && (
+        <Upload
+          showUploadList={false}
+          beforeUpload={(file) => { handleShopImageUpload(file); return false }}
+          accept="image/*"
+          disabled={imageUploading}
+        >
+          <a className={imageUploading ? 'shop-upload-link disabled' : 'shop-upload-link'}>
+            {imageUploading ? <><LoadingOutlined /> 上传中</> : '上传'}
+          </a>
+        </Upload>
+      )}
+    </Space>
+  )
+
+  const renderImagesArea = () => (
+    <div className="shop-images-area">
+      <Image.PreviewGroup>
+        <div className="shop-images-grid">
+          {shopImages.map((img) => (
+            <div className="shop-image-item" key={img.id}>
+              <Image
+                src={img.url}
+                alt="门店照片"
+                preview={{
+                  mask: <span><EyeOutlined style={{ marginInlineEnd: 4 }} /> 预览</span>,
+                }}
+              />
+              <Popconfirm
+                title="删除该照片？"
+                onConfirm={() => handleShopImageDelete(img.id)}
+                okText="删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true, loading: imageDeletingId === img.id }}
+              >
+                <Button
+                  className="shop-image-delete-btn"
+                  size="small"
+                  danger
+                  type="primary"
+                  shape="circle"
+                  icon={<DeleteOutlined />}
+                  loading={imageDeletingId === img.id}
+                />
+              </Popconfirm>
+            </div>
+          ))}
+          {shopImages.length === 0 && (
+            <>
+              <div className="shop-image-placeholder" />
+              <div className="shop-image-placeholder" />
+              <div className="shop-image-placeholder" />
+            </>
+          )}
+        </div>
+      </Image.PreviewGroup>
+      <div className={`shop-field-hint ${!imagesLoading && shopImages.length < 2 ? 'warning' : ''}`}>
+        {imagesLoading ? '加载中...' : `已上传 ${shopImages.length} 张（要求 2-16 张），单张不超过 5MB`}
+      </div>
+    </div>
+  )
+
+  const renderTimeConfig = () => (
+    <div className="shop-time-config">
+      {timeGroups.map((group) => (
+        <div key={group.type} className="shop-time-group">
+          <div className="shop-time-group-title">{group.label}</div>
+          <div className="shop-time-tags">
+            {group.times.map((t) => {
+              const isSelected = selectedTimes.includes(t.id)
+              return (
+                <Tag.CheckableTag
+                  key={t.id}
+                  checked={isSelected}
+                  onChange={() => {
+                    setSelectedTimes((prev) =>
+                      isSelected ? prev.filter((id) => id !== t.id) : [...prev, t.id]
+                    )
+                  }}
+                >
+                  {t.label}
+                </Tag.CheckableTag>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+
+  const lngLatValue = Form.useWatch(['lng'], editForm)
+  const latValue = Form.useWatch(['lat'], editForm)
+  const hasCoords = lngLatValue != null && latValue != null
 
   return (
     <div className="shop-list-page">
@@ -796,7 +1183,7 @@ function ShopListPage() {
       <Modal
         title={editRecord ? '编辑门店' : '新增门店'}
         open={showEdit}
-        onCancel={() => setShowEdit(false)}
+        onCancel={closeEdit}
         onOk={handleEditSubmit}
         okText={editRecord ? '保存' : '确认新增'}
         cancelText="取消"
@@ -806,27 +1193,76 @@ function ShopListPage() {
       >
         <Form form={editForm} layout="vertical" style={{ marginTop: 16 }}>
           <Form.Item
-            label="门店名称"
-            name="name"
-            rules={isAddMode ? [{ required: true, message: '请输入门店名称' }] : []}
-          >
-            <Input placeholder="请输入门店名称" />
-          </Form.Item>
-          <Form.Item
-            label="所属公司"
+            label="所属企业"
             name="company_id"
-            rules={isAddMode ? [{ required: true, message: '请选择所属公司' }] : []}
+            rules={[{ required: true, message: '请选择所属企业' }]}
           >
-            <Select placeholder="请选择所属公司" showSearch optionFilterProp="children">
+            <Select placeholder="请选择所属企业" showSearch optionFilterProp="children">
               {companies.filter((c) => c.name).map((c) => (
                 <Select.Option key={c.id} value={c.id}>{c.name}</Select.Option>
               ))}
             </Select>
           </Form.Item>
           <Form.Item
-            label="所在商圈"
+            label="门店名称"
+            name="name"
+            rules={[
+              { required: true, message: '请输入门店名称' },
+              { min: 1, max: 12, message: '长度 1-12 个字符' },
+            ]}
+          >
+            <Input placeholder="请输入" maxLength={12} showCount />
+          </Form.Item>
+          <Form.Item label="门店状态" name="status">
+            <Select onChange={handleStatusChange}>
+              <Select.Option value={0}>启用</Select.Option>
+              <Select.Option value={1}>已关闭</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Divider dashed style={{ margin: '12px 0 20px' }} />
+
+          <Form.Item
+            label="店长称呼"
+            name="manager_name"
+            rules={[
+              {
+                validator: (_, v) => {
+                  if (!v) return Promise.resolve()
+                  if (v.length >= 1 && v.length <= 8) return Promise.resolve()
+                  return Promise.reject(new Error('长度 1-8 个字符'))
+                },
+              },
+            ]}
+          >
+            <Input placeholder="请输入店长称呼" maxLength={8} showCount />
+          </Form.Item>
+          <Form.Item
+            label="店长手机号"
+            name="manager_phone"
+            rules={[
+              {
+                validator: (_, v) => {
+                  if (!v) return Promise.resolve()
+                  if (/^\d{11}$/.test(v)) return Promise.resolve()
+                  return Promise.reject(new Error('手机号为 11 位数字'))
+                },
+              },
+            ]}
+          >
+            <Input placeholder="请输入手机号" maxLength={11} />
+          </Form.Item>
+          <Form.Item label={renderAvatarLabel()}>
+            {renderAvatarBox()}
+            <div className="shop-field-hint">自动裁剪为 200×200</div>
+          </Form.Item>
+
+          <Divider dashed style={{ margin: '12px 0 20px' }} />
+
+          <Form.Item
+            label="城市商圈"
             name="district_id"
-            rules={isAddMode ? [{ required: true, message: '请选择所在商圈' }] : []}
+            rules={[{ required: true, message: '请选择所在商圈' }]}
           >
             <Cascader
               options={cascaderData}
@@ -834,180 +1270,60 @@ function ShopListPage() {
               changeOnSelect
             />
           </Form.Item>
-          <Form.Item label="地址" name="address" rules={isAddMode ? [{ required: true, message: '请输入地址' }] : []}>
-            <Input placeholder="请输入详细地址" />
+          <Form.Item
+            label="详细地址"
+            name="address"
+            rules={[
+              { required: true, message: '请输入详细地址' },
+              { min: 1, max: 36, message: '长度 1-36 个字符' },
+            ]}
+          >
+            <Input placeholder="请输入详细地址" maxLength={36} showCount />
           </Form.Item>
-          <Form.Item label="经纬度">
-            <Space align="start" style={{ display: 'flex' }}>
-              <Form.Item name="lng" noStyle>
-                <InputNumber placeholder="经度" style={{ width: 140 }} disabled />
-              </Form.Item>
-              <Form.Item name="lat" noStyle>
-                <InputNumber placeholder="纬度" style={{ width: 140 }} disabled />
-              </Form.Item>
+          <Form.Item label="经纬度" required>
+            <Form.Item name="lng" noStyle hidden><Input /></Form.Item>
+            <Form.Item name="lat" noStyle hidden><Input /></Form.Item>
+            <Flex align="center" gap={12}>
+              <div className={`shop-coord-tip ${hasCoords ? 'selected' : ''}`}>
+                {hasCoords ? (
+                  <><CheckCircleFilled style={{ color: '#52c41a' }} /> 已选择</>
+                ) : (
+                  <span style={{ color: 'var(--text-tertiary)' }}>未选择</span>
+                )}
+              </div>
               <Button
+                size="small"
                 icon={<EnvironmentOutlined />}
                 onClick={openMapPicker}
               >
-                地图选点
+                {hasCoords ? '重新选点' : '地图选点'}
               </Button>
-            </Space>
+            </Flex>
           </Form.Item>
-          <Form.Item label="状态" name="status">
-            <Select>
-              <Select.Option value={0}>正常</Select.Option>
-              <Select.Option value={1}>已关闭</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item label="面试时间" name="time">
-            <Select mode="multiple" placeholder="请选择面试时间段" optionFilterProp="children">
-              {allTimes.map((t) => (
-                <Select.Option key={t.id} value={t.id}>{t.label}</Select.Option>
-              ))}
-            </Select>
+
+          {!isAddMode && (
+            <>
+              <Divider dashed style={{ margin: '12px 0 20px' }} />
+
+              <Form.Item label={renderBenefitsLabel()}>
+                {renderBenefitsArea()}
+              </Form.Item>
+              <Form.Item label={renderImagesLabel()}>
+                {renderImagesArea()}
+              </Form.Item>
+
+              <Divider dashed style={{ margin: '12px 0 20px' }} />
+
+              <Form.Item label="可面试时间配置">
+                {renderTimeConfig()}
+              </Form.Item>
+            </>
+          )}
+
+          <Form.Item label="面试提醒">
+            <Input disabled placeholder="后端接口暂未对接" />
           </Form.Item>
         </Form>
-      </Modal>
-
-      {/* 图片管理弹窗 */}
-      <Modal
-        title="门店形象图片"
-        open={showImg}
-        onCancel={() => setShowImg(false)}
-        footer={null}
-        width={640}
-      >
-        <div style={{ marginBottom: 16 }}>
-          <Upload
-            showUploadList={false}
-            beforeUpload={(file) => { handleImgUpload(file); return false }}
-            accept="image/*"
-          >
-            <Button type="primary" icon={imgUploading ? <LoadingOutlined /> : <UploadOutlined />} loading={imgUploading}>
-              上传图片
-            </Button>
-          </Upload>
-        </div>
-        {imgLoading ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>加载中...</div>
-        ) : imgList.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>暂无图片</div>
-        ) : (
-          <div className="shop-img-grid">
-            {imgList.map((img) => (
-              <div key={img.id} className="shop-img-item">
-                <Image src={img.url} alt="门店图片" width={140} height={140} style={{ objectFit: 'cover', borderRadius: 8 }} />
-                <Popconfirm title="确认删除此图片？" onConfirm={() => handleImgDelete(img.id)} okText="确认" cancelText="取消">
-                  <Button type="text" danger size="small" icon={<DeleteOutlined />} style={{ marginTop: 4 }}>
-                    删除
-                  </Button>
-                </Popconfirm>
-              </div>
-            ))}
-          </div>
-        )}
-      </Modal>
-
-      {/* 福利管理弹窗 */}
-      <Modal
-        title="门店福利标签"
-        open={showBenefits}
-        onCancel={() => { setShowBenefits(false); setAddBenefitVisible(false) }}
-        footer={null}
-        width={500}
-      >
-        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>共 {benefits.length} 个标签</span>
-          <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => setAddBenefitVisible(true)}>
-            新增标签
-          </Button>
-        </div>
-
-        {addBenefitVisible && (
-          <div style={{ marginBottom: 16, padding: 12, background: 'var(--bg-tertiary)', borderRadius: 8 }}>
-            <Form form={benefitForm} layout="inline" size="small">
-              <Form.Item name="label" rules={[{ required: true, message: '请输入标签名' }]}>
-                <Input placeholder="标签名称" style={{ width: 150 }} />
-              </Form.Item>
-              <Form.Item name="sort" initialValue={0}>
-                <InputNumber placeholder="排序" min={0} style={{ width: 80 }} />
-              </Form.Item>
-              <Form.Item>
-                <Space>
-                  <Button type="primary" size="small" onClick={handleAddBenefit} loading={benefitLoading}>
-                    确定
-                  </Button>
-                  <Button size="small" onClick={() => { setAddBenefitVisible(false); benefitForm.resetFields() }}>
-                    取消
-                  </Button>
-                </Space>
-              </Form.Item>
-            </Form>
-          </div>
-        )}
-
-        {benefitLoading ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>加载中...</div>
-        ) : benefits.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>暂无福利标签</div>
-        ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {benefits.map((b) => (
-              <Tag
-                key={b.id}
-                closable
-                onClose={() => handleDeleteBenefit(b.id)}
-                color="blue"
-                style={{ padding: '4px 10px', fontSize: 13 }}
-              >
-                {b.label}
-              </Tag>
-            ))}
-          </div>
-        )}
-      </Modal>
-
-      {/* 时间配置弹窗 */}
-      <Modal
-        title="面试时间配置"
-        open={showTimeConfig}
-        onCancel={() => setShowTimeConfig(false)}
-        onOk={handleSaveTimeConfig}
-        okText="保存"
-        cancelText="取消"
-        confirmLoading={timeConfigLoading}
-        width={500}
-      >
-        {timeConfigLoading ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>加载中...</div>
-        ) : (
-          <div className="time-config-groups">
-            {timeGroups.map((group) => (
-              <div key={group.type} className="time-config-group">
-                <h4 style={{ margin: '12px 0 8px', color: 'var(--text-secondary)', fontSize: 13 }}>{group.label}</h4>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {group.times.map((t) => {
-                    const isSelected = selectedTimes.includes(t.id)
-                    return (
-                      <Tag
-                        key={t.id}
-                        color={isSelected ? '#8B7355' : 'default'}
-                        style={{ cursor: 'pointer', padding: '4px 12px', fontSize: 13 }}
-                        onClick={() => {
-                          setSelectedTimes((prev) =>
-                            isSelected ? prev.filter((id) => id !== t.id) : [...prev, t.id]
-                          )
-                        }}
-                      >
-                        {t.label}
-                      </Tag>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </Modal>
 
       {/* 地图选点弹窗 */}
@@ -1032,12 +1348,19 @@ function ShopListPage() {
             onClear={() => setSuggestions([])}
           />
           {suggestions.length > 0 && (
-            <div className="map-suggestion-list">
+            <div
+              className="map-suggestion-list"
+              onMouseDown={(e) => e.preventDefault()}
+            >
               {suggestions.map((item, idx) => (
                 <div
                   key={idx}
                   className="map-suggestion-item"
-                  onClick={() => handleSelectSuggestion(item)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleSelectSuggestion(item)
+                  }}
                 >
                   <div className="suggestion-title">{item.title}</div>
                   <div className="suggestion-address">{item.province}{item.city}{item.district} {item.address}</div>

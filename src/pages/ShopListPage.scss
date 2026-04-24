@@ -2,30 +2,178 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+}
 
-  .shop-img-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 12px;
-  }
+// 下列样式在 Modal（Portal 到 body）里生效，不能嵌套在 .shop-list-page 下
 
-  .shop-img-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+.shop-upload-link {
+  color: var(--primary, #1677ff);
+  font-weight: 500;
+  cursor: pointer;
+
+  &.disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
   }
 }
 
+.shop-field-hint {
+  font-size: 12px;
+  color: var(--text-tertiary, #999);
+  margin-top: 6px;
+
+  &.warning {
+    color: var(--warning-color, #faad14);
+  }
+}
+
+// 店长头像
+.shop-avatar-box {
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-tertiary, #f5f5f5);
+  border: 1px solid var(--border-color, #e5e5e5);
+
+  .ant-image,
+  .ant-image-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .shop-avatar-empty {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+// 门店福利
+.shop-benefits-area {
+  padding: 8px 12px;
+  border: 1px solid var(--border-color, #e5e5e5);
+  border-radius: 8px;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+// 相关照片
+.shop-images-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  .shop-images-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .shop-image-item {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-tertiary, #fafafa);
+    border: 1px solid var(--border-color, #e5e5e5);
+    flex: 0 0 auto;
+
+    .ant-image,
+    .ant-image-img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .ant-image-mask {
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .shop-image-delete-btn {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      z-index: 2;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    &:hover .shop-image-delete-btn {
+      opacity: 1;
+    }
+  }
+
+  .shop-image-placeholder {
+    width: 72px;
+    height: 72px;
+    border-radius: 8px;
+    background: var(--bg-tertiary, #f5f5f5);
+    border: 1px solid var(--border-color, #e5e5e5);
+    flex: 0 0 auto;
+  }
+}
+
+// 经纬度提示
+.shop-coord-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--bg-tertiary, #fafafa);
+  border: 1px solid var(--border-color, #e5e5e5);
+  min-width: 120px;
+
+  &.selected {
+    color: var(--text-primary, #333);
+  }
+}
+
+// 面试时间配置
+.shop-time-config {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-color, #e5e5e5);
+  border-radius: 8px;
+
+  .shop-time-group-title {
+    font-size: 13px;
+    color: var(--text-secondary, #666);
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+
+  .shop-time-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+// 地图选点搜索下拉（保留原样式）
 .map-suggestion-list {
   position: absolute;
   top: 100%;
   left: 0;
-  right: 80px;
+  right: 0;
+  // 地图弹窗本身 z-index 1100；这里要高于腾讯地图 GL 渲染层，
+  // 否则 click 事件会被地图 canvas 抢走，触发 map.on('click') 把标记乱打。
+  z-index: 1101;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  z-index: 10;
   max-height: 280px;
   overflow-y: auto;
 

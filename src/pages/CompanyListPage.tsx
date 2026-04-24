@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
-  Table, Button, Modal, Form, Input, Upload, Alert, Space, message, Flex, Typography,
+  Table, Button, Modal, Form, Input, Upload, Alert, Space, message, Flex, Typography, Image, Popconfirm,
+  Divider, Select, Checkbox, Tag,
 } from 'antd'
+import type { InputRef } from 'antd'
 import {
-  PlusOutlined, EyeOutlined, UploadOutlined, LoadingOutlined,
-  EditOutlined, BankOutlined, ReloadOutlined,
+  PlusOutlined, EyeOutlined, LoadingOutlined,
+  EditOutlined, BankOutlined, ReloadOutlined, DeleteOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { uploadImageToOss } from '../utils/ossUpload'
@@ -16,7 +18,15 @@ interface CompanyItem {
   logo: string
   introduction: string | null
   name_short: string | null
+  desc_short: string | null
   remark: string | null
+}
+
+interface CompanyBenefit {
+  id: number
+  label: string
+  sort: number
+  company_id: number
 }
 
 interface CompanyListResponse {
@@ -29,6 +39,13 @@ interface CompanyListResponse {
     currentPage: number
     data: CompanyItem[]
   }
+}
+
+interface CompanyImageItem {
+  id: number
+  company_id: number
+  url: string
+  sort: number
 }
 
 import { adminFetch, API_BASE } from '../utils/adminFetch'
@@ -56,6 +73,20 @@ function CompanyListPage() {
   const [editForm] = Form.useForm()
   const [editLogoUrl, setEditLogoUrl] = useState('')
   const [editUploading, setEditUploading] = useState(false)
+
+  // 企业形象图片（仅编辑场景，依赖已有 company_id）
+  const [companyImages, setCompanyImages] = useState<CompanyImageItem[]>([])
+  const [imagesLoading, setImagesLoading] = useState(false)
+  const [imageUploading, setImageUploading] = useState(false)
+  const [imageDeletingId, setImageDeletingId] = useState<number | null>(null)
+
+  // 企业通用福利标签（仅编辑场景，依赖已有 company_id）
+  const [companyBenefits, setCompanyBenefits] = useState<CompanyBenefit[]>([])
+  const [benefitsLoading, setBenefitsLoading] = useState(false)
+  const [benefitAdding, setBenefitAdding] = useState(false)
+  const [benefitInputVisible, setBenefitInputVisible] = useState(false)
+  const [benefitInputValue, setBenefitInputValue] = useState('')
+  const benefitInputRef = useRef<InputRef>(null)
 
   const fetchCompanies = async (page: number = 1, size?: number) => {
     const actualSize = size || pageSize
@@ -125,14 +156,14 @@ function CompanyListPage() {
         body: JSON.stringify({
           name: values.name?.trim(),
           name_short: values.name_short?.trim(),
+          desc_short: values.desc_short?.trim() || null,
           logo: addLogoUrl,
           introduction: values.introduction?.trim() || null,
-          remark: values.remark?.trim() || null,
         }),
       })
       const json = await res.json()
       if (json.errno === 0) {
-        message.success('新增企业成功')
+        message.success('新增成功')
         handleAddSuccess()
       } else {
         message.error(json.errmsg || '新增失败')
@@ -144,6 +175,172 @@ function CompanyListPage() {
     }
   }
 
+  // ---- 企业形象图片（编辑场景） ----
+
+  const fetchCompanyImages = async (companyId: number) => {
+    setImagesLoading(true)
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/company/imgList?company_id=${companyId}`)
+      const json = await res.json()
+      if (json.errno === 0) {
+        // 兼容两种返回格式：data 直接是数组 / data.data 是数组
+        const list: CompanyImageItem[] = Array.isArray(json.data)
+          ? json.data
+          : Array.isArray(json.data?.data)
+            ? json.data.data
+            : []
+        list.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
+        setCompanyImages(list)
+      } else {
+        message.error(json.errmsg || '加载企业形象失败')
+      }
+    } catch (e: any) {
+      message.error(e.message || '网络请求失败')
+    } finally {
+      setImagesLoading(false)
+    }
+  }
+
+  const handleCompanyImageUpload = async (file: File, companyId: number) => {
+    if (!file.type.startsWith('image/')) {
+      message.error('请选择图片文件')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      message.error('图片大小不能超过 5MB')
+      return
+    }
+    if (companyImages.length >= 16) {
+      message.error('最多只能上传 16 张通用照片')
+      return
+    }
+    setImageUploading(true)
+    try {
+      const url = await uploadImageToOss(file, 'company')
+      const formData = new FormData()
+      formData.append('company_id', String(companyId))
+      formData.append('url', url)
+      formData.append('sort', String(companyImages.length + 1))
+      const res = await adminFetch(`${API_BASE}/admin/company/imgPut`, {
+        method: 'POST',
+        body: formData,
+      })
+      const json = await res.json()
+      if (json.errno === 0) {
+        message.success('上传成功')
+        await fetchCompanyImages(companyId)
+      } else {
+        message.error(json.errmsg || '保存企业形象失败')
+      }
+    } catch (e: any) {
+      message.error('上传失败：' + (e.message || '未知错误'))
+    } finally {
+      setImageUploading(false)
+    }
+  }
+
+  // ---- 企业通用福利标签 ----
+
+  const fetchCompanyBenefits = async (companyId: number) => {
+    setBenefitsLoading(true)
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/benefits/listCompany?company_id=${companyId}`)
+      const json = await res.json()
+      if (json.errno === 0) {
+        const list: CompanyBenefit[] = Array.isArray(json.data)
+          ? json.data
+          : Array.isArray(json.data?.data)
+            ? json.data.data
+            : []
+        list.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
+        setCompanyBenefits(list)
+      } else {
+        message.error(json.errmsg || '加载福利标签失败')
+      }
+    } catch (e: any) {
+      message.error(e.message || '网络请求失败')
+    } finally {
+      setBenefitsLoading(false)
+    }
+  }
+
+  const handleAddCompanyBenefit = async (companyId: number) => {
+    const label = benefitInputValue.trim()
+    if (!label) {
+      setBenefitInputVisible(false)
+      setBenefitInputValue('')
+      return
+    }
+    if (label.length < 2 || label.length > 8) {
+      message.error('标签长度 2-8 个字符')
+      return
+    }
+    if (companyBenefits.length >= 8) {
+      message.error('最多只能添加 8 个福利标签')
+      setBenefitInputVisible(false)
+      setBenefitInputValue('')
+      return
+    }
+    setBenefitAdding(true)
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/benefits/putCompany`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_id: companyId,
+          label,
+          sort: companyBenefits.length,
+        }),
+      })
+      const json = await res.json()
+      if (json.errno === 0) {
+        message.success('添加成功')
+        setBenefitInputVisible(false)
+        setBenefitInputValue('')
+        await fetchCompanyBenefits(companyId)
+      } else {
+        message.error(json.errmsg || '添加失败')
+      }
+    } catch (e: any) {
+      message.error(e.message || '网络请求失败')
+    } finally {
+      setBenefitAdding(false)
+    }
+  }
+
+  const handleDeleteCompanyBenefit = async (id: number, companyId: number) => {
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/benefits/delCompany?id=${id}`)
+      const json = await res.json()
+      if (json.errno === 0) {
+        message.success('删除成功')
+        await fetchCompanyBenefits(companyId)
+      } else {
+        message.error(json.errmsg || '删除失败')
+      }
+    } catch (e: any) {
+      message.error(e.message || '网络请求失败')
+    }
+  }
+
+  const handleCompanyImageDelete = async (id: number, companyId: number) => {
+    setImageDeletingId(id)
+    try {
+      const res = await adminFetch(`${API_BASE}/admin/company/imgDel?id=${id}`)
+      const json = await res.json()
+      if (json.errno === 0) {
+        message.success('删除成功')
+        await fetchCompanyImages(companyId)
+      } else {
+        message.error(json.errmsg || '删除失败')
+      }
+    } catch (e: any) {
+      message.error(e.message || '网络请求失败')
+    } finally {
+      setImageDeletingId(null)
+    }
+  }
+
   // ---- 编辑 ----
 
   const openEditDialog = (record: CompanyItem) => {
@@ -152,15 +349,21 @@ function CompanyListPage() {
     editForm.setFieldsValue({
       name: record.name,
       name_short: record.name_short || '',
+      desc_short: record.desc_short || '',
       introduction: record.introduction || '',
-      remark: record.remark || '',
     })
+    fetchCompanyImages(record.id)
+    fetchCompanyBenefits(record.id)
   }
 
   const closeEditDialog = () => {
     setEditRecord(null)
     editForm.resetFields()
     setEditLogoUrl('')
+    setCompanyImages([])
+    setCompanyBenefits([])
+    setBenefitInputVisible(false)
+    setBenefitInputValue('')
   }
 
   const handleEditLogoUpload = async (file: File) => {
@@ -194,9 +397,9 @@ function CompanyListPage() {
           id: editRecord!.id,
           name: values.name?.trim(),
           name_short: values.name_short?.trim(),
+          desc_short: values.desc_short?.trim() || null,
           logo: editLogoUrl,
           introduction: values.introduction?.trim() || null,
-          remark: values.remark?.trim() || null,
         }),
       })
       const json = await res.json()
@@ -255,6 +458,20 @@ function CompanyListPage() {
       render: (v: string | null) => v || '-',
     },
     {
+      title: '短简介',
+      dataIndex: 'desc_short',
+      key: 'desc_short',
+      width: 180,
+      render: (v: string | null) =>
+        v ? (
+          <a onClick={() => setDetailContent({ title: '短简介', content: v })}>
+            {v.length > 20 ? v.slice(0, 20) + '...' : v}
+          </a>
+        ) : (
+          '-'
+        ),
+    },
+    {
       title: '企业介绍',
       dataIndex: 'introduction',
       key: 'introduction',
@@ -303,55 +520,184 @@ function CompanyListPage() {
 
   // ---- Logo 上传 UI（新增 & 编辑共用） ----
 
-  const renderLogoUploadArea = (
-    logoUrl: string,
+  const renderLogoLabel = (
     uploading: boolean,
     onUpload: (file: File) => void,
   ) => (
-    <div className="logo-upload-area">
+    <Space size={10} align="center">
+      <span>品牌Logo</span>
+      <Upload
+        showUploadList={false}
+        beforeUpload={(file) => { onUpload(file); return false }}
+        accept="image/*"
+        disabled={uploading}
+      >
+        <a className={uploading ? 'brand-logo-upload-link disabled' : 'brand-logo-upload-link'}>
+          {uploading ? <><LoadingOutlined /> 上传中</> : '上传'}
+        </a>
+      </Upload>
+    </Space>
+  )
+
+  const renderLogoPreviewBox = (logoUrl: string) => (
+    <div className="brand-logo-box">
       {logoUrl ? (
-        <>
-          <div className="logo-preview">
-            <img src={logoUrl} alt="Logo 预览" />
-            <div className="logo-preview-overlay">
-              <PlusOutlined style={{ fontSize: 20 }} />
-              <span>更换</span>
-            </div>
-          </div>
-          <Upload
-            showUploadList={false}
-            beforeUpload={(file) => { onUpload(file); return false }}
-            accept="image/*"
-          >
-            <Button size="small" style={{ marginTop: 8 }} loading={uploading}>
-              <UploadOutlined /> 更换 Logo
-            </Button>
-          </Upload>
-        </>
+        <Image
+          src={logoUrl}
+          alt="品牌Logo"
+          preview={{
+            mask: (
+              <span>
+                <EyeOutlined style={{ marginInlineEnd: 4 }} />
+                预览
+              </span>
+            ),
+          }}
+        />
       ) : (
-        <Upload
-          showUploadList={false}
-          beforeUpload={(file) => { onUpload(file); return false }}
-          accept="image/*"
-        >
-          <button
-            className="logo-upload-placeholder"
-            style={{ border: 'none', background: 'none', cursor: uploading ? 'not-allowed' : 'pointer' }}
-          >
-            {uploading ? (
-              <>
-                <LoadingOutlined style={{ fontSize: 24 }} />
-                <span>上传中...</span>
-              </>
-            ) : (
-              <>
-                <UploadOutlined style={{ fontSize: 24 }} />
-                <span>点击上传 Logo</span>
-              </>
-            )}
-          </button>
-        </Upload>
+        <div className="brand-logo-empty" />
       )}
+    </div>
+  )
+
+  // ---- 企业通用福利标签 UI ----
+
+  const renderBenefitsArea = (companyId: number) => (
+    <div className="company-benefits-area">
+      {benefitsLoading && companyBenefits.length === 0 ? (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>加载中...</Typography.Text>
+      ) : (
+        <Space size={[8, 8]} wrap>
+          {companyBenefits.map((b) => (
+            <Tag
+              key={b.id}
+              closable
+              onClose={(e) => {
+                e.preventDefault()
+                handleDeleteCompanyBenefit(b.id, companyId)
+              }}
+              style={{ padding: '4px 10px', fontSize: 13, margin: 0 }}
+            >
+              {b.label}
+            </Tag>
+          ))}
+          {benefitInputVisible ? (
+            <Input
+              ref={benefitInputRef}
+              type="text"
+              size="small"
+              style={{ width: 120 }}
+              value={benefitInputValue}
+              maxLength={8}
+              onChange={(e) => setBenefitInputValue(e.target.value)}
+              onBlur={() => handleAddCompanyBenefit(companyId)}
+              onPressEnter={() => handleAddCompanyBenefit(companyId)}
+              disabled={benefitAdding}
+              placeholder="2-8 字符"
+            />
+          ) : companyBenefits.length < 8 ? (
+            <Tag
+              onClick={() => {
+                setBenefitInputVisible(true)
+                setTimeout(() => benefitInputRef.current?.focus(), 0)
+              }}
+              style={{
+                cursor: 'pointer',
+                padding: '4px 10px',
+                fontSize: 13,
+                borderStyle: 'dashed',
+                background: 'transparent',
+                margin: 0,
+              }}
+            >
+              <PlusOutlined /> 新增
+            </Tag>
+          ) : null}
+        </Space>
+      )}
+      <div style={{ fontSize: 12, color: 'var(--text-tertiary, #999)', marginTop: 6 }}>
+        已添加 {companyBenefits.length} / 8，单个标签 2-8 字符
+      </div>
+    </div>
+  )
+
+  // ---- 企业形象图片 UI（仅编辑场景） ----
+
+  const renderCompanyImagesArea = (companyId: number) => (
+    <div className="company-images-area">
+      <Image.PreviewGroup>
+        <div className="company-images-grid">
+          {companyImages.map((img) => (
+            <div className="company-image-item" key={img.id}>
+              <Image
+                src={img.url}
+                alt={`企业形象 #${img.sort}`}
+                preview={{
+                  mask: (
+                    <span>
+                      <EyeOutlined style={{ marginInlineEnd: 4 }} />
+                      预览
+                    </span>
+                  ),
+                }}
+              />
+              <Popconfirm
+                title="删除该图片？"
+                description="删除后不可恢复"
+                onConfirm={() => handleCompanyImageDelete(img.id, companyId)}
+                okText="删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true, loading: imageDeletingId === img.id }}
+              >
+                <Button
+                  className="company-image-delete-btn"
+                  size="small"
+                  danger
+                  type="primary"
+                  shape="circle"
+                  icon={<DeleteOutlined />}
+                  loading={imageDeletingId === img.id}
+                />
+              </Popconfirm>
+            </div>
+          ))}
+          {companyImages.length < 16 && (
+            <Upload
+              showUploadList={false}
+              beforeUpload={(file) => { handleCompanyImageUpload(file, companyId); return false }}
+              accept="image/*"
+              disabled={imageUploading}
+            >
+              <button
+                type="button"
+                className="company-image-add"
+                disabled={imageUploading}
+                style={{ cursor: imageUploading ? 'not-allowed' : 'pointer' }}
+              >
+                {imageUploading ? (
+                  <>
+                    <LoadingOutlined style={{ fontSize: 22 }} />
+                    <span>上传中...</span>
+                  </>
+                ) : (
+                  <>
+                    <PlusOutlined style={{ fontSize: 22 }} />
+                    <span>添加图片</span>
+                  </>
+                )}
+              </button>
+            </Upload>
+          )}
+        </div>
+      </Image.PreviewGroup>
+      <Typography.Text
+        type={!imagesLoading && companyImages.length < 2 ? 'warning' : 'secondary'}
+        className="company-images-tip"
+      >
+        {imagesLoading
+          ? '加载中...'
+          : `已上传 ${companyImages.length} 张（要求 2-16 张），单张不超过 5MB`}
+      </Typography.Text>
     </div>
   )
 
@@ -430,9 +776,9 @@ function CompanyListPage() {
         </p>
       </Modal>
 
-      {/* 新增企业弹窗 */}
+      {/* 新增企业/品牌弹窗 */}
       <Modal
-        title="新增企业"
+        title="新增企业/品牌"
         open={showAddDialog}
         onCancel={() => {
           setShowAddDialog(false)
@@ -444,31 +790,71 @@ function CompanyListPage() {
         cancelText="取消"
         confirmLoading={addLoading}
         okButtonProps={{ disabled: !addLogoUrl || addUploading }}
-        width={520}
+        width={560}
         destroyOnClose
       >
         <Form form={addForm} layout="vertical" style={{ marginTop: 16 }}>
-          <Form.Item label="企业名称" name="name" rules={[{ required: true, message: '请输入企业名称' }]}>
-            <Input placeholder="请输入企业名称" />
+          <Form.Item
+            label="企业/品牌全称"
+            name="name"
+            rules={[
+              { required: true, message: '请输入企业/品牌全称' },
+              { min: 1, max: 36, message: '长度 1-36 个字符' },
+            ]}
+          >
+            <Input placeholder="请输入企业/品牌全称" maxLength={36} showCount />
           </Form.Item>
-          <Form.Item label="企业简称" name="name_short" rules={[{ required: true, message: '请输入企业简称' }]}>
-            <Input placeholder="请输入企业简称" />
+          <Form.Item
+            label="对外品牌名"
+            name="name_short"
+            rules={[
+              { required: true, message: '请输入对外品牌名' },
+              { min: 1, max: 12, message: '长度 1-12 个字符' },
+            ]}
+          >
+            <Input placeholder="请输入对外品牌名" maxLength={12} showCount />
           </Form.Item>
-          <Form.Item label="企业 Logo" required>
-            {renderLogoUploadArea(addLogoUrl, addUploading, handleAddLogoUpload)}
+          <Form.Item label={renderLogoLabel(addUploading, handleAddLogoUpload)} required>
+            {renderLogoPreviewBox(addLogoUrl)}
           </Form.Item>
-          <Form.Item label="企业介绍" name="introduction">
-            <Input.TextArea placeholder="请输入企业介绍（选填）" rows={3} />
+          <Form.Item label="品牌状态">
+            <Select value={1} disabled options={[{ value: 1, label: '启用' }]} />
           </Form.Item>
-          <Form.Item label="备注" name="remark">
-            <Input.TextArea placeholder="请输入备注（选填）" rows={2} />
+
+          <Divider dashed style={{ margin: '12px 0 20px' }} />
+
+          <Form.Item label="企业标签">
+            <Space size={12} style={{ display: 'flex' }}>
+              <Checkbox disabled style={{ flex: 1 }}>知名品牌</Checkbox>
+              <Checkbox disabled defaultChecked style={{ flex: 1 }}>已认证</Checkbox>
+            </Space>
+          </Form.Item>
+          <Form.Item
+            label="企业介绍"
+            name="introduction"
+            rules={[
+              { required: true, message: '请输入企业介绍' },
+              { min: 1, max: 400, message: '长度 1-400 个字符' },
+            ]}
+          >
+            <Input.TextArea placeholder="请输入企业介绍" rows={4} maxLength={400} showCount />
+          </Form.Item>
+          <Form.Item
+            label="短简介"
+            name="desc_short"
+            rules={[
+              { required: true, message: '请输入短简介' },
+              { min: 1, max: 16, message: '长度 1-16 个字符' },
+            ]}
+          >
+            <Input.TextArea placeholder="请输入企业短简介" rows={2} maxLength={16} showCount />
           </Form.Item>
         </Form>
       </Modal>
 
-      {/* 编辑企业弹窗 */}
+      {/* 编辑企业/品牌弹窗 */}
       <Modal
-        title="编辑企业"
+        title="编辑企业/品牌"
         open={!!editRecord}
         onCancel={closeEditDialog}
         onOk={handleEditSubmit}
@@ -476,24 +862,79 @@ function CompanyListPage() {
         cancelText="取消"
         confirmLoading={editLoading}
         okButtonProps={{ disabled: editUploading }}
-        width={520}
+        width={560}
         destroyOnClose
       >
         <Form form={editForm} layout="vertical" style={{ marginTop: 16 }}>
-          <Form.Item label="企业名称" name="name">
-            <Input placeholder="请输入企业名称" />
+          <Form.Item
+            label="企业/品牌全称"
+            name="name"
+            rules={[
+              { required: true, message: '请输入企业/品牌全称' },
+              { min: 1, max: 36, message: '长度 1-36 个字符' },
+            ]}
+          >
+            <Input placeholder="请输入企业/品牌全称" maxLength={36} showCount />
           </Form.Item>
-          <Form.Item label="企业简称" name="name_short">
-            <Input placeholder="请输入企业简称" />
+          <Form.Item
+            label="对外品牌名"
+            name="name_short"
+            rules={[
+              { required: true, message: '请输入对外品牌名' },
+              { min: 1, max: 12, message: '长度 1-12 个字符' },
+            ]}
+          >
+            <Input placeholder="请输入对外品牌名" maxLength={12} showCount />
           </Form.Item>
-          <Form.Item label="企业 Logo">
-            {renderLogoUploadArea(editLogoUrl, editUploading, handleEditLogoUpload)}
+          <Form.Item label={renderLogoLabel(editUploading, handleEditLogoUpload)}>
+            {renderLogoPreviewBox(editLogoUrl)}
           </Form.Item>
-          <Form.Item label="企业介绍" name="introduction">
-            <Input.TextArea placeholder="请输入企业介绍（选填）" rows={3} />
+          <Form.Item label="品牌状态">
+            <Select value={1} disabled options={[{ value: 1, label: '启用' }]} />
           </Form.Item>
-          <Form.Item label="备注" name="remark">
-            <Input.TextArea placeholder="请输入备注（选填）" rows={2} />
+
+          <Divider dashed style={{ margin: '12px 0 20px' }} />
+
+          <Form.Item label="企业标签">
+            <Space size={12} style={{ display: 'flex' }}>
+              <Checkbox disabled style={{ flex: 1 }}>知名品牌</Checkbox>
+              <Checkbox disabled defaultChecked style={{ flex: 1 }}>已认证</Checkbox>
+            </Space>
+          </Form.Item>
+          <Form.Item
+            label="企业介绍"
+            name="introduction"
+            rules={[
+              { required: true, message: '请输入企业介绍' },
+              { min: 1, max: 400, message: '长度 1-400 个字符' },
+            ]}
+          >
+            <Input.TextArea placeholder="请输入企业介绍" rows={4} maxLength={400} showCount />
+          </Form.Item>
+          <Form.Item
+            label="短简介"
+            name="desc_short"
+            rules={[
+              { required: true, message: '请输入短简介' },
+              { min: 1, max: 16, message: '长度 1-16 个字符' },
+            ]}
+          >
+            <Input.TextArea placeholder="请输入企业短简介" rows={2} maxLength={16} showCount />
+          </Form.Item>
+
+          <Divider dashed style={{ margin: '12px 0 20px' }} />
+
+          <Form.Item label="企业通用福利标签">
+            {editRecord && renderBenefitsArea(editRecord.id)}
+          </Form.Item>
+          <Form.Item
+            label={
+              <Space size={10} align="center">
+                <span>通用照片</span>
+              </Space>
+            }
+          >
+            {editRecord && renderCompanyImagesArea(editRecord.id)}
           </Form.Item>
         </Form>
       </Modal>

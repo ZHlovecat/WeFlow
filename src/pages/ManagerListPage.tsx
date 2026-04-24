@@ -1,17 +1,57 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Table, Button, Modal, Form, Input, Select,
+  Table, Button, Modal, Form, Input, Select, Upload,
   Alert, Space, message, Popconfirm, Tag, Avatar, Flex, Typography,
 } from 'antd'
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, UserOutlined,
   UserSwitchOutlined, ReloadOutlined, LinkOutlined,
+  UploadOutlined, LoadingOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import './ManagerListPage.scss'
 
 import { adminFetch, API_BASE } from '../utils/adminFetch'
+import { uploadImageToOss } from '../utils/ossUpload'
 import MiniUserPickerModal from '../components/MiniUserPickerModal'
+
+// 将图片居中裁剪为正方形并缩放为指定尺寸（店长头像统一 200x200）
+async function resizeAvatarToSquare(file: File, size: number): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const canvas = document.createElement('canvas')
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        reject(new Error('Canvas 不可用'))
+        return
+      }
+      const side = Math.min(img.width, img.height)
+      const sx = (img.width - side) / 2
+      const sy = (img.height - side) / 2
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size)
+      const isJpeg = file.type === 'image/jpeg' || file.type === 'image/jpg'
+      const mime = isJpeg ? 'image/jpeg' : 'image/png'
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('图片处理失败'))
+          return
+        }
+        const ext = isJpeg ? 'jpg' : 'png'
+        resolve(new File([blob], `avatar_${Date.now()}.${ext}`, { type: mime }))
+      }, mime, 0.92)
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('图片加载失败'))
+    }
+    img.src = url
+  })
+}
 
 interface ManagerItem {
   id: number
@@ -58,6 +98,8 @@ function ManagerListPage() {
   const [editRecord, setEditRecord] = useState<ManagerItem | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [form] = Form.useForm()
+  const [avatarUrl, setAvatarUrl] = useState<string>('')
+  const [avatarUploading, setAvatarUploading] = useState(false)
 
   // 关联小程序权限弹窗
   const [linkOpen, setLinkOpen] = useState(false)
@@ -151,6 +193,7 @@ function ManagerListPage() {
   const openAdd = () => {
     setEditRecord(null)
     form.resetFields()
+    setAvatarUrl('')
     // 新增时默认填入当前筛选的门店
     if (filterShopId) {
       form.setFieldsValue({ shop_id: filterShopId })
@@ -160,6 +203,7 @@ function ManagerListPage() {
 
   const openEdit = (record: ManagerItem) => {
     setEditRecord(record)
+    setAvatarUrl(record.avatar || '')
     form.setFieldsValue({
       name: record.name || '',
       phone: record.phone || '',
@@ -168,21 +212,41 @@ function ManagerListPage() {
     setShowDialog(true)
   }
 
+  const handleAvatarUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      message.error('请选择图片文件')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      message.error('图片大小不能超过 5MB')
+      return
+    }
+    setAvatarUploading(true)
+    try {
+      const resized = await resizeAvatarToSquare(file, 200)
+      const url = await uploadImageToOss(resized, 'avatar')
+      setAvatarUrl(url)
+    } catch (err: any) {
+      message.error('头像上传失败：' + (err.message || '未知错误'))
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
       setSubmitting(true)
-      const body: any = {
-        name: values.name?.trim(),
-        phone: values.phone?.trim() || null,
-        shop_id: values.shop_id,
-      }
-      if (editRecord) body.id = editRecord.id
+      const body = new FormData()
+      body.append('name', values.name?.trim() || '')
+      body.append('phone', values.phone?.trim() || '')
+      body.append('shop_id', String(values.shop_id ?? ''))
+      body.append('avatar', avatarUrl || '')
+      if (editRecord) body.append('id', String(editRecord.id))
 
       const res = await adminFetch(`${API_BASE}/admin/shop/managerPut`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body,
       })
       const json = await res.json()
       if (json.errno === 0) {
@@ -433,6 +497,30 @@ function ManagerListPage() {
         width={480}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item label="头像">
+            <Upload
+              showUploadList={false}
+              beforeUpload={(file) => { handleAvatarUpload(file); return false }}
+              accept="image/*"
+              disabled={avatarUploading}
+            >
+              <div className="manager-avatar-uploader">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="头像" className="manager-avatar-preview" />
+                ) : (
+                  <div className="manager-avatar-placeholder">
+                    {avatarUploading ? <LoadingOutlined /> : <UploadOutlined />}
+                    <div style={{ marginTop: 6, fontSize: 12 }}>
+                      {avatarUploading ? '上传中' : '点击上传'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Upload>
+            <div style={{ color: 'var(--text-tertiary)', fontSize: 12, marginTop: 4 }}>
+              上传后自动裁剪为 200x200
+            </div>
+          </Form.Item>
           <Form.Item
             label="姓名"
             name="name"
