@@ -56,8 +56,7 @@ interface ConfigSchema {
   ignoredUpdateVersion: string
   updateChannel: 'auto' | 'stable' | 'preview' | 'dev'
   // GitHub Releases 自定义更新
-  lastSeenReleaseTime: string  // ISO 时间戳字符串，作为下次比较的基线
-  ignoredReleaseTime: string   // 用户主动忽略的 release published_at
+  ignoredReleaseTag: string    // 用户主动忽略的 release tag（如 v0.0.2），按 tag 维度跳过自动提示
 
   // 通知
   notificationEnabled: boolean
@@ -134,8 +133,7 @@ export class ConfigService {
       authHelloSecret: '',
       ignoredUpdateVersion: '',
       updateChannel: 'auto',
-      lastSeenReleaseTime: '',
-      ignoredReleaseTime: '',
+      ignoredReleaseTag: '',
       notificationEnabled: true,
       notificationPosition: 'top-right',
       notificationFilterMode: 'all',

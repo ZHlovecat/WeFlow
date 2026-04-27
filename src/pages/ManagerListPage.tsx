@@ -386,7 +386,7 @@ function ManagerListPage() {
     {
       title: '操作',
       key: 'action',
-      width: 280,
+      width: 340,
       align: 'center',
       fixed: 'right',
       render: (_: unknown, record: ManagerItem) => (
@@ -462,7 +462,7 @@ function ManagerListPage() {
           dataSource={managers}
           rowKey="id"
           loading={loading}
-          scroll={{ x: 1000 }}
+          scroll={{ x: 1300 }}
           pagination={{
             current: currentPage,
             total,

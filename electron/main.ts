@@ -1634,7 +1634,8 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('app:checkForUpdates', async (_event, opts?: { manual?: boolean }) => {
-    if (!AUTO_UPDATE_ENABLED) {
+    // dev 模式下：自动检查仍然跳过（避免开发期打扰），但手动检查放行让开发者能验证版本号比较逻辑
+    if (!AUTO_UPDATE_ENABLED && !opts?.manual) {
       return { hasUpdate: false, reason: 'disabled' }
     }
     return githubUpdaterService.checkForUpdates(!!opts?.manual)
@@ -1642,7 +1643,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle('app:downloadUpdate', async (event) => {
     if (!AUTO_UPDATE_ENABLED) {
-      return { success: false, error: '自动更新已暂时禁用' }
+      return { success: false, error: '开发环境不支持下载安装包，请使用打包后的版本' }
     }
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return { success: false, error: '窗口已关闭' }
@@ -1658,9 +1659,11 @@ function registerIpcHandlers() {
     return githubUpdaterService.installAndQuit()
   })
 
-  ipcMain.handle('app:ignoreUpdate', async (_, payload?: string | { publishedAt?: string }) => {
-    const publishedAt = typeof payload === 'string' ? payload : payload?.publishedAt
-    return githubUpdaterService.ignoreUpdate(publishedAt)
+  ipcMain.handle('app:ignoreUpdate', async (_, payload?: string | { tag?: string; version?: string; publishedAt?: string }) => {
+    const tag = typeof payload === 'string'
+      ? payload
+      : payload?.tag || payload?.version || payload?.publishedAt
+    return githubUpdaterService.ignoreUpdate(tag)
   })
 
   // 窗口控制

@@ -46,9 +46,29 @@ export interface DownloadProgressPayload {
 
 const REPO_OWNER = 'hicccc77'
 const REPO_NAME = 'WeFlow'
-const RELEASE_TAG = 'latest'
-const RELEASE_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${RELEASE_TAG}`
+// 改为 GitHub 原生 "最新非 draft / 非 prerelease" 接口，按版本号 tag 发布更新
+const RELEASE_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`
 const USER_AGENT = `WeFlow-Updater/${app.getVersion?.() || '0.0.0'}`
+
+function normalizeVersion(v: string | undefined | null): number[] {
+  if (!v) return [0, 0, 0]
+  const cleaned = String(v).trim().replace(/^v/i, '').split(/[-+]/)[0]
+  const parts = cleaned.split('.').map((x) => {
+    const n = parseInt(x, 10)
+    return Number.isFinite(n) ? n : 0
+  })
+  while (parts.length < 3) parts.push(0)
+  return parts.slice(0, 3)
+}
+
+function compareVersions(a: string, b: string): number {
+  const pa = normalizeVersion(a)
+  const pb = normalizeVersion(b)
+  for (let i = 0; i < 3; i += 1) {
+    if (pa[i] !== pb[i]) return pa[i] - pb[i]
+  }
+  return 0
+}
 
 function logUpdate(...args: unknown[]) {
   console.log('[Update]', ...args)
@@ -170,7 +190,8 @@ class GithubUpdaterService {
 
   /**
    * 拉取 GitHub Release 信息并判断是否有更新。
-   * @param manual 是否手动触发（手动触发时放宽首次基线策略，直接以 published_at vs lastSeenReleaseTime 比较）
+   * 比较规则：远端 release.tag_name（如 v0.0.2）与 app.getVersion()（如 0.0.1）做语义化版本比较，
+   * 远端 > 本地 才视为有更新；忽略策略按 tag_name 存储。
    */
   async checkForUpdates(manual = false): Promise<UpdateAvailablePayload> {
     try {
@@ -208,15 +229,15 @@ class GithubUpdaterService {
       }
 
       const publishedAtMs = Date.parse(release.published_at) || 0
-      const lastSeen = String(this.configService?.get('lastSeenReleaseTime') || '')
-      const lastSeenMs = lastSeen ? Date.parse(lastSeen) || 0 : 0
-      const ignored = String(this.configService?.get('ignoredReleaseTime') || '')
+      const remoteVersion = parseVersionFromAssetName(asset.name) || release.tag_name || ''
+      const localVersion = app.getVersion?.() || '0.0.0'
+      const ignoredTag = String(this.configService?.get('ignoredReleaseTag') || '')
 
       const baseInfo: UpdateAvailablePayload = {
         hasUpdate: false,
         publishedAt: release.published_at,
         publishedAtMs,
-        version: parseVersionFromAssetName(asset.name) || release.tag_name,
+        version: remoteVersion,
         assetName: asset.name,
         assetSize: asset.size,
         downloadUrl: asset.browser_download_url,
@@ -225,44 +246,27 @@ class GithubUpdaterService {
         releaseTitle: release.name || release.tag_name,
       }
 
-      // 首次启动（无基线）
-      if (!lastSeenMs) {
-        if (manual) {
-          // 手动检查时不能因为"首次"就吃掉，按 release 时间提示一次
-          baseInfo.hasUpdate = true
-          this.latestPayload = baseInfo
-          logUpdate('手动检查（无基线），按 release 时间提示更新', release.published_at)
-          return baseInfo
-        }
-        // 自动检查：把当前 release 时间记为基线，之后再有新构建才提示
-        try {
-          this.configService?.set('lastSeenReleaseTime', release.published_at)
-        } catch {
-          /* ignore */
-        }
-        const payload: UpdateAvailablePayload = { ...baseInfo, hasUpdate: false, reason: 'first-run' }
-        this.latestPayload = payload
-        logUpdate('首次启动，写入基线 published_at=', release.published_at)
-        return payload
-      }
-
-      if (publishedAtMs <= lastSeenMs) {
+      const cmp = compareVersions(remoteVersion, localVersion)
+      if (cmp <= 0) {
         const payload: UpdateAvailablePayload = { ...baseInfo, hasUpdate: false, reason: 'up-to-date' }
         this.latestPayload = payload
-        logUpdate('远端版本不新于本地基线，无需更新')
+        logUpdate(`远端版本 ${remoteVersion} 不新于本地 ${localVersion}，无需更新`)
         return payload
       }
 
-      if (!manual && ignored && ignored === release.published_at) {
+      // 自动检查时按版本号忽略（规范化去掉 v 前缀比较）；手动检查无视忽略
+      const normalize = (s: string) => String(s || '').trim().replace(/^v/i, '')
+      const remoteIdentifier = release.tag_name || remoteVersion
+      if (!manual && ignoredTag && normalize(ignoredTag) === normalize(remoteIdentifier)) {
         const payload: UpdateAvailablePayload = { ...baseInfo, hasUpdate: false, reason: 'ignored' }
         this.latestPayload = payload
-        logUpdate('该版本已被用户忽略，跳过自动提示')
+        logUpdate(`该版本已被用户忽略：${ignoredTag}`)
         return payload
       }
 
       baseInfo.hasUpdate = true
       this.latestPayload = baseInfo
-      logUpdate('发现新版本', release.published_at, asset.name)
+      logUpdate(`发现新版本：本地 ${localVersion} → 远端 ${remoteVersion}（${asset.name}）`)
       return baseInfo
     } catch (e: any) {
       const msg = e?.message || String(e)
@@ -273,12 +277,16 @@ class GithubUpdaterService {
     }
   }
 
-  ignoreUpdate(publishedAt?: string) {
-    const target = publishedAt || this.latestPayload?.publishedAt
+  ignoreUpdate(tagOrVersion?: string) {
+    // 兼容旧 UI 传 publishedAt（ISO 时间戳）的情况——若不像版本号，则回退到当前最新检查的 version
+    const looksLikeVersion = (s: string) => /\d+\.\d+\.\d+/.test(s)
+    const fallback = this.latestPayload?.version || ''
+    const candidate = tagOrVersion && looksLikeVersion(tagOrVersion) ? tagOrVersion : fallback
+    const target = String(candidate || '').trim().replace(/^v/i, '')
     if (!target) return { success: false }
     try {
-      this.configService?.set('ignoredReleaseTime', target)
-      logUpdate('已忽略版本 publishedAt=', target)
+      this.configService?.set('ignoredReleaseTag', target)
+      logUpdate('已忽略版本 tag=', target)
       return { success: true }
     } catch (e: any) {
       return { success: false, error: e?.message || String(e) }
@@ -502,14 +510,7 @@ class GithubUpdaterService {
     if (!filePath || !existsSync(filePath)) {
       return { success: false, error: '安装包不存在，请重新下载' }
     }
-    const publishedAt = this.latestPayload?.publishedAt
-    if (publishedAt) {
-      try {
-        this.configService?.set('lastSeenReleaseTime', publishedAt)
-      } catch {
-        /* ignore */
-      }
-    }
+    // 安装后下次启动 app.getVersion() 会变成新版本，自然不会再提示同一版本
 
     if (process.platform === 'darwin') {
       // dmg / zip：用系统默认方式打开，由用户确认覆盖安装
