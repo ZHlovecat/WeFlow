@@ -1,7 +1,7 @@
 {
-  "name": "weflow",
-  "version": "0.0.2",
-  "description": "WeFlow",
+  "name": "renlicang-desktop",
+  "version": "0.0.3",
+  "description": "浅雨科技人力仓系统",
   "main": "dist-electron/main.js",
   "author": {
     "name": "cc",
@@ -88,7 +88,7 @@
       "repo": "WeFlow",
       "releaseType": "release"
     },
-    "productName": "WeFlow",
+    "productName": "浅雨科技人力仓系统",
     "artifactName": "${productName}-${version}-Setup.${ext}",
     "directories": {
       "output": "release"

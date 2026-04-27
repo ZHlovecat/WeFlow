@@ -116,13 +116,10 @@ function App() {
   )
   const [lockUseHello, setLockUseHello] = useState(false)
 
-  // 协议同意状态
-  const [showAgreement, setShowAgreement] = useState(false)
-  const [agreementChecked, setAgreementChecked] = useState(false)
+  // 协议加载锁：用于阻塞依赖加载完成才执行的副作用（如 Wayland 检查）
   const [agreementLoading, setAgreementLoading] = useState(true)
 
-  // 数据收集同意状态
-  const [showAnalyticsConsent, setShowAnalyticsConsent] = useState(false)
+  // 数据收集同意状态（设置页可手动开关；启动不再弹窗）
   const [analyticsConsent, setAnalyticsConsent] = useState<boolean | null>(null)
 
   const [showWaylandWarning, setShowWaylandWarning] = useState(false)
@@ -262,30 +259,19 @@ function App() {
     saveTheme()
   }, [currentTheme, themeMode, themeHydrated])
 
-  // 检查是否已同意协议
+  // 启动时仅读取数据收集同意状态用于初始化 cloudControl，不再弹任何协议/数据收集弹窗
   useEffect(() => {
-    const checkAgreement = async () => {
+    const init = async () => {
       try {
-        const agreed = await configService.getAgreementAccepted()
-        if (!agreed) {
-          setShowAgreement(true)
-        } else {
-          // 协议已同意，检查数据收集同意状态
-          const consent = await configService.getAnalyticsConsent()
-          const denyCount = await configService.getAnalyticsDenyCount()
-          setAnalyticsConsent(consent)
-          // 如果未设置同意状态且拒绝次数小于2次，显示弹窗
-          if (consent === null && denyCount < 2) {
-            setShowAnalyticsConsent(true)
-          }
-        }
+        const consent = await configService.getAnalyticsConsent()
+        setAnalyticsConsent(consent)
       } catch (e) {
-        console.error('检查协议状态失败:', e)
+        console.error('读取数据收集设置失败:', e)
       } finally {
         setAgreementLoading(false)
       }
     }
-    checkAgreement()
+    init()
   }, [])
 
   // 初始化数据收集（仅在用户同意后）
@@ -303,33 +289,6 @@ function App() {
       cloudControl.recordPage(path)
     }
   }, [location.pathname, analyticsConsent])
-
-  const handleAgree = async () => {
-    if (!agreementChecked) return
-    await configService.setAgreementAccepted(true)
-    setShowAgreement(false)
-    // 协议同意后，检查数据收集同意
-    const consent = await configService.getAnalyticsConsent()
-    if (consent === null) {
-      setShowAnalyticsConsent(true)
-    }
-  }
-
-  const handleDisagree = () => {
-    window.electronAPI.window.close()
-  }
-
-  const handleAnalyticsAllow = async () => {
-    await configService.setAnalyticsConsent(true)
-    setAnalyticsConsent(true)
-    setShowAnalyticsConsent(false)
-  }
-
-  const handleAnalyticsDeny = async () => {
-    const denyCount = await configService.getAnalyticsDenyCount()
-    await configService.setAnalyticsDenyCount(denyCount + 1)
-    setShowAnalyticsConsent(false)
-  }
 
   // 监听更新通知（GitHub Releases 自定义流程）
   useEffect(() => {
@@ -641,97 +600,6 @@ function App() {
       {/* 全局批量转写进度浮窗 */}
       <BatchTranscribeGlobal />
       <BatchImageDecryptGlobal />
-
-      {/* 用户协议弹窗 */}
-      {showAgreement && !agreementLoading && (
-        <div className="agreement-overlay">
-          <div className="agreement-modal">
-            <div className="agreement-header">
-              <Shield size={32} />
-              <h2>用户协议与隐私政策</h2>
-            </div>
-            <div className="agreement-content">
-              <p>欢迎使用WeFlow！在使用本软件前，请仔细阅读以下条款：</p>
-              <div className="agreement-notice">
-                <strong>这是免费软件，如果你是付费购买的话请骂死那个骗子。</strong>
-                <span className="agreement-notice-link">
-                  官方网站：
-                  <a href="https://weflow.top" target="_blank" rel="noreferrer">
-                    https://weflow.top
-                  </a>
-                  &nbsp;·&nbsp;
-                  <a href="https://github.com/hicccc77/WeFlow" target="_blank" rel="noreferrer">
-                    GitHub 仓库
-                  </a>
-                </span>
-              </div>
-              <div className="agreement-text">
-                <h4>1. 数据安全</h4>
-                <p>本软件所有数据处理均在本地完成，不会上传任何聊天记录、个人信息到服务器。你的数据完全由你自己掌控。</p>
-
-                <h4>2. 使用须知</h4>
-                <p>本软件仅供个人学习研究使用，请勿用于任何非法用途。使用本软件解密、查看、分析的数据应为你本人所有或已获得授权。</p>
-
-                <h4>3. 免责声明</h4>
-                <p>因使用本软件产生的任何直接或间接损失，开发者不承担任何责任。请确保你的使用行为符合当地法律法规。</p>
-
-                <h4>4. 隐私保护</h4>
-                <p>本软件不收集任何用户隐私数据。软件更新检测仅获取版本信息，不涉及任何个人隐私。</p>
-              </div>
-            </div>
-            <div className="agreement-footer">
-              <label className="agreement-checkbox">
-                <input
-                  type="checkbox"
-                  checked={agreementChecked}
-                  onChange={(e) => setAgreementChecked(e.target.checked)}
-                />
-                <span>我已阅读并同意上述协议</span>
-              </label>
-              <div className="agreement-actions">
-                <button className="btn btn-secondary" onClick={handleDisagree}>不同意</button>
-                <button className="btn btn-primary" onClick={handleAgree} disabled={!agreementChecked}>同意并继续</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 数据收集同意弹窗 */}
-      {showAnalyticsConsent && !agreementLoading && (
-        <div className="agreement-overlay">
-          <div className="agreement-modal">
-            <div className="agreement-header">
-              <Shield size={32} />
-              <h2>使用数据收集说明</h2>
-            </div>
-            <div className="agreement-content">
-              <div className="agreement-text">
-                <p>为了持续改进 WeFlow 并提供更好的用户体验，我们希望收集一些匿名的使用数据。</p>
-
-                <h4>我们会收集什么？</h4>
-                <p>• 功能使用情况（如哪些功能被使用、使用频率）</p>
-                <p>• 应用性能数据（如加载时间、错误日志）</p>
-                <p>• 设备基本信息（如操作系统版本、应用版本）</p>
-
-                <h4>我们不会收集什么？</h4>
-                <p>• 你的聊天记录内容</p>
-                <p>• 个人身份信息</p>
-                <p>• 联系人信息</p>
-                <p>• 任何可以识别你身份的数据</p>
-                <p>• 一切你担心会涉及隐藏的数据</p>
-
-              </div>
-            </div>
-            <div className="agreement-footer">
-              <div className="agreement-actions">
-                <button className="btn btn-secondary" onClick={handleAnalyticsDeny}>不允许</button>
-                <button className="btn btn-primary" onClick={handleAnalyticsAllow}>允许</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/*{showWaylandWarning && (*/}
       {/*  <div className="agreement-overlay">*/}

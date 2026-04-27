@@ -38,8 +38,8 @@ function TitleBar({
   return (
     <div className={`title-bar${isMac ? ' title-bar-mac' : ''}`}>
       <div className="title-brand">
-        {showLogo && <img src="./logo.png" alt="WeFlow" className="title-logo" />}
-        <span className="titles">{title || 'WeFlow'}</span>
+        {showLogo && <img src="./logo.png" alt="浅雨科技人力仓系统" className="title-logo" />}
+        <span className="titles">{title || '浅雨科技人力仓系统'}</span>
         {onToggleSidebar ? (
           <button
             type="button"

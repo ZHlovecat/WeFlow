@@ -108,7 +108,7 @@ export default function LockScreen({ onUnlock, avatar, useHello = false }: LockS
                     )}
                 </div>
 
-                <h2 className="lock-title">WeFlow 已锁定</h2>
+                <h2 className="lock-title">浅雨科技人力仓系统 已锁定</h2>
 
                 <form className="lock-form" onSubmit={handlePasswordSubmit}>
                     <div className="input-group">

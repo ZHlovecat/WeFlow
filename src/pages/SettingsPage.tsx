@@ -1411,7 +1411,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
             {
               value: 'quote-top' as const,
               label: '引用在上',
-              description: '更接近当前 WeFlow 风格',
+              description: '更接近当前 浅雨科技人力仓系统 风格',
               successMessage: '已切换为引用在上样式'
             },
             {
@@ -1482,7 +1482,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
         <label>开机自启动</label>
         <span className="form-hint">
           {launchAtStartupSupported
-            ? '开启后，登录系统时会自动启动 WeFlow。'
+            ? '开启后，登录系统时会自动启动 浅雨科技人力仓系统。'
             : launchAtStartupReason || '当前环境暂不支持开机自启动。'}
         </span>
         <div className="log-toggle-line">
@@ -1864,7 +1864,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
         <div className="anti-revoke-hero">
           <div className="anti-revoke-hero-main">
             <h3>防撤回</h3>
-            <p>你可以根据会话进行防撤回部署，安装后无需保持 WeFlow 运行即可实现防撤回</p>
+            <p>你可以根据会话进行防撤回部署，安装后无需保持 浅雨科技人力仓系统 运行即可实现防撤回</p>
           </div>
           <div className="anti-revoke-metrics">
             <div className="anti-revoke-metric is-total">
@@ -2881,9 +2881,9 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
     <div className="tab-content about-tab">
       <div className="about-card">
         <div className="about-logo">
-          <img src="./logo.png" alt="WeFlow" />
+          <img src="./logo.png" alt="浅雨科技人力仓系统" />
         </div>
-        <h2 className="about-name">WeFlow</h2>
+        <h2 className="about-name">浅雨科技人力仓系统</h2>
         <p className="about-version">v{appVersion || '...'}</p>
       </div>
 
@@ -2892,13 +2892,13 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
         <div className="about-links">
           <a href="#" onClick={(e) => { e.preventDefault(); window.electronAPI.shell.openExternal('https://weflow.top') }}>官网</a>
           <span>·</span>
-          <a href="#" onClick={(e) => { e.preventDefault(); window.electronAPI.shell.openExternal('https://github.com/hicccc77/WeFlow') }}>GitHub 仓库</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); window.electronAPI.shell.openExternal('https://github.com/ZHlovecat/WeFlow') }}>GitHub 仓库</a>
           <span>·</span>
           <a href="#" onClick={(e) => { e.preventDefault(); window.electronAPI.shell.openExternal('https://chatlab.fun') }}>ChatLab</a>
           <span>·</span>
           <a href="#" onClick={(e) => { e.preventDefault(); window.electronAPI.window.openAgreementWindow() }}>用户协议</a>
         </div>
-        <p className="copyright">© 2026 WeFlow. All rights reserved.</p>
+        <p className="copyright">© 2026 浅雨科技. All rights reserved.</p>
 
         <div className="log-toggle-line" style={{ marginTop: '16px', justifyContent: 'center' }}>
           <span style={{ fontSize: '13px', opacity: 0.7 }}>匿名数据收集</span>

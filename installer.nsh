@@ -10,11 +10,11 @@ ManifestDPIAware true
 !macroend
 
 ; 在安装开始前修正安装目录
+; productName 为中文，Windows 路径不便用中文目录，统一用英文别名 Renlicang
 !macro preInit
-  ; 如果安装目录不以 WeFlow 结尾，自动追加
   ${WordFind} "$INSTDIR" "\" "-1" $R0
-  ${If} $R0 != "WeFlow"
-    StrCpy $INSTDIR "$INSTDIR\WeFlow"
+  ${If} $R0 != "Renlicang"
+    StrCpy $INSTDIR "$INSTDIR\Renlicang"
   ${EndIf}
 !macroend
 

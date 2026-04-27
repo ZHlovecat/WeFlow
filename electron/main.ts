@@ -3295,23 +3295,25 @@ app.whenReady().then(async () => {
   updateSplashProgress(30, '正在加载界面...')
   mainWindow = createWindow({ autoShow: false })
 
-  let iconName = 'icon.ico';
-  if (process.platform === 'linux') {
-    iconName = 'icon.png';
-  } else if (process.platform === 'darwin') {
-    iconName = 'icon.icns';
-  }
-
   const isDev = !!process.env.VITE_DEV_SERVER_URL
 
-  const resolvedTrayIcon = isDev
-      ? join(__dirname, `../public/${iconName}`)
-      : join(process.resourcesPath, iconName);
+  // 生产环境：每平台用各自原生格式（icns/ico/png）
+  let prodIconName = 'icon.ico'
+  if (process.platform === 'linux') {
+    prodIconName = 'icon.png'
+  } else if (process.platform === 'darwin') {
+    prodIconName = 'icon.icns'
+  }
+  // dev 环境：public 目录里没有 icns，macOS/Linux 统一用 png（Tray 完全支持），Win 用 ico
+  const devIconName = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
 
+  const resolvedTrayIcon = isDev
+      ? join(__dirname, `../public/${devIconName}`)
+      : join(process.resourcesPath, prodIconName)
 
   try {
     tray = new Tray(resolvedTrayIcon)
-    tray.setToolTip('WeFlow')
+    tray.setToolTip('浅雨科技人力仓系统')
     const contextMenu = Menu.buildFromTemplate([
       {
         label: '显示主窗口',
