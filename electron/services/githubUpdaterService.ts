@@ -44,7 +44,7 @@ export interface DownloadProgressPayload {
   bytesPerSecond: number
 }
 
-const REPO_OWNER = 'hicccc77'
+const REPO_OWNER = 'ZHlovecat'
 const REPO_NAME = 'WeFlow'
 // 改为 GitHub 原生 "最新非 draft / 非 prerelease" 接口，按版本号 tag 发布更新
 const RELEASE_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`
@@ -147,8 +147,9 @@ function pickAssetForCurrentPlatform(assets: ReleaseAsset[]): ReleaseAsset | nul
 }
 
 function parseVersionFromAssetName(assetName: string): string | undefined {
-  // 例：WeFlow-4.3.0-Setup.exe / WeFlow-4.3.0-arm64.dmg / WeFlow-4.3.0-mac.zip
-  const m = assetName.match(/(\d+\.\d+\.\d+(?:[-.][\w.-]+)?)/)
+  // 例：WeFlow-0.0.1-Setup.exe / WeFlow-0.0.1-arm64.dmg / WeFlow-0.0.1-mac.zip
+  // 仅匹配 主.次.修订 + 可选 prerelease 段（字母+数字+点），不吞文件后缀
+  const m = assetName.match(/(\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)?)/)
   return m ? m[1] : undefined
 }
 

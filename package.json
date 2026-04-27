@@ -1,6 +1,6 @@
 {
   "name": "weflow",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "WeFlow",
   "main": "dist-electron/main.js",
   "author": {
@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/hicccc77/WeFlow"
+    "url": "https://github.com/ZHlovecat/WeFlow"
   },
   "//": "二改不应改变此处的作者与应用信息",
   "scripts": {
@@ -84,7 +84,7 @@
     "appId": "com.WeFlow.app",
     "publish": {
       "provider": "github",
-      "owner": "hicccc77",
+      "owner": "ZHlovecat",
       "repo": "WeFlow",
       "releaseType": "release"
     },
