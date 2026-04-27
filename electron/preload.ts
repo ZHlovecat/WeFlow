@@ -55,16 +55,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     getLaunchAtStartupStatus: () => ipcRenderer.invoke('app:getLaunchAtStartupStatus'),
     setLaunchAtStartup: (enabled: boolean) => ipcRenderer.invoke('app:setLaunchAtStartup', enabled),
-    checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates'),
-    downloadAndInstall: () => ipcRenderer.invoke('app:downloadAndInstall'),
-    ignoreUpdate: (version: string) => ipcRenderer.invoke('app:ignoreUpdate', version),
+    checkForUpdates: (opts?: { manual?: boolean }) => ipcRenderer.invoke('app:checkForUpdates', opts),
+    downloadUpdate: () => ipcRenderer.invoke('app:downloadUpdate'),
+    cancelDownload: () => ipcRenderer.invoke('app:cancelDownload'),
+    installAndQuit: () => ipcRenderer.invoke('app:installAndQuit'),
+    ignoreUpdate: (publishedAt?: string) => ipcRenderer.invoke('app:ignoreUpdate', publishedAt),
     onDownloadProgress: (callback: (progress: any) => void) => {
-      ipcRenderer.on('app:downloadProgress', (_, progress) => callback(progress))
-      return () => ipcRenderer.removeAllListeners('app:downloadProgress')
+      const handler = (_: unknown, progress: any) => callback(progress)
+      ipcRenderer.on('app:downloadProgress', handler)
+      return () => ipcRenderer.removeListener('app:downloadProgress', handler)
     },
-    onUpdateAvailable: (callback: (info: { version: string; releaseNotes: string }) => void) => {
-      ipcRenderer.on('app:updateAvailable', (_, info) => callback(info))
-      return () => ipcRenderer.removeAllListeners('app:updateAvailable')
+    onUpdateAvailable: (callback: (info: any) => void) => {
+      const handler = (_: unknown, info: any) => callback(info)
+      ipcRenderer.on('app:updateAvailable', handler)
+      return () => ipcRenderer.removeListener('app:updateAvailable', handler)
+    },
+    onDownloadDone: (callback: (info: { filePath: string }) => void) => {
+      const handler = (_: unknown, info: { filePath: string }) => callback(info)
+      ipcRenderer.on('app:downloadDone', handler)
+      return () => ipcRenderer.removeListener('app:downloadDone', handler)
     },
     checkWayland: () => ipcRenderer.invoke('app:checkWayland'),
   },
@@ -74,7 +83,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getPath: () => ipcRenderer.invoke('log:getPath'),
     read: () => ipcRenderer.invoke('log:read'),
     clear: () => ipcRenderer.invoke('log:clear'),
-    debug: (data: any) => ipcRenderer.send('log:debug', data)
+    debug: (data: any) => ipcRenderer.send('log:debug', data),
+    api: (payload: {
+      phase: 'request' | 'response' | 'error'
+      method: string
+      url: string
+      status?: number
+      ok?: boolean
+      elapsedMs?: number
+      errno?: number
+      errmsg?: string
+      bodyPreview?: string
+      error?: string
+    }) => ipcRenderer.send('log:api', payload)
   },
 
   diagnostics: {

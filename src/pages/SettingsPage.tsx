@@ -518,11 +518,11 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
     setIsCheckingUpdate(true)
     setUpdateInfo(null)
     try {
-      const result = await window.electronAPI.app.checkForUpdates()
+      const result = await window.electronAPI.app.checkForUpdates({ manual: true })
       if (result.hasUpdate) {
         setUpdateInfo(result)
         setShowUpdateDialog(true)
-        showMessage(`发现新版：${result.version}`, true)
+        showMessage(`发现新版：${result.version || ''}`, true)
       } else {
         showMessage('当前已是最新版', true)
       }
@@ -535,12 +535,15 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
 
   const handleUpdateNow = async () => {
     setShowUpdateDialog(false)
-
     setIsDownloading(true)
-    setDownloadProgress({ percent: 0 })
+    setDownloadProgress({ transferred: 0, total: updateInfo?.assetSize || 0, percent: 0, bytesPerSecond: 0 })
     try {
       showMessage('正在下载更新...', true)
-      await window.electronAPI.app.downloadAndInstall()
+      const res = await window.electronAPI.app.downloadUpdate()
+      if (!res?.success) {
+        showMessage(`更新失败: ${res?.error || '下载失败'}`, false)
+        setIsDownloading(false)
+      }
     } catch (e: any) {
       showMessage(`更新失败: ${e}`, false)
       setIsDownloading(false)
@@ -548,13 +551,12 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
   }
 
   const handleIgnoreUpdate = async () => {
-    if (!updateInfo || !updateInfo.version) return
-
+    if (!updateInfo) return
     try {
-      await window.electronAPI.app.ignoreUpdate(updateInfo.version)
+      await window.electronAPI.app.ignoreUpdate(updateInfo.publishedAt)
       setShowUpdateDialog(false)
       setUpdateInfo(null)
-      showMessage(`已忽略版本 ${updateInfo.version}`, true)
+      showMessage(`已忽略版本 ${updateInfo.version || ''}`, true)
     } catch (e: any) {
       showMessage(`操作失败: ${e}`, false)
     }

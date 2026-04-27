@@ -7,6 +7,28 @@ export interface SessionChatWindowOpenOptions {
   initialContactType?: ContactInfo['type']
 }
 
+export interface UpdateAvailablePayload {
+  hasUpdate: boolean
+  publishedAt?: string
+  publishedAtMs?: number
+  version?: string
+  assetName?: string
+  assetSize?: number
+  downloadUrl?: string
+  releaseUrl?: string
+  releaseNotes?: string
+  releaseTitle?: string
+  reason?: 'first-run' | 'no-asset' | 'no-release' | 'ignored' | 'up-to-date' | 'error' | 'disabled'
+  errorMessage?: string
+}
+
+export interface DownloadProgressPayload {
+  transferred: number
+  total: number
+  percent: number
+  bytesPerSecond: number
+}
+
 export interface ElectronAPI {
   window: {
     minimize: () => void
@@ -64,11 +86,14 @@ export interface ElectronAPI {
       reason?: string
       error?: string
     }>
-    checkForUpdates: () => Promise<{ hasUpdate: boolean; version?: string; releaseNotes?: string }>
-    downloadAndInstall: () => Promise<void>
-    ignoreUpdate: (version: string) => Promise<{ success: boolean }>
-    onDownloadProgress: (callback: (progress: number) => void) => () => void
-    onUpdateAvailable: (callback: (info: { version: string; releaseNotes: string }) => void) => () => void
+    checkForUpdates: (opts?: { manual?: boolean }) => Promise<UpdateAvailablePayload>
+    downloadUpdate: () => Promise<{ success: boolean; filePath?: string; error?: string }>
+    cancelDownload: () => Promise<{ success: boolean }>
+    installAndQuit: () => Promise<{ success: boolean; error?: string }>
+    ignoreUpdate: (publishedAt?: string) => Promise<{ success: boolean; error?: string }>
+    onDownloadProgress: (callback: (progress: DownloadProgressPayload) => void) => () => void
+    onUpdateAvailable: (callback: (info: UpdateAvailablePayload) => void) => () => void
+    onDownloadDone: (callback: (info: { filePath: string }) => void) => () => void
     checkWayland: () => Promise<boolean>
   }
   notification: {
@@ -84,6 +109,18 @@ export interface ElectronAPI {
     read: () => Promise<{ success: boolean; content?: string; error?: string }>
     clear: () => Promise<{ success: boolean; error?: string }>
     debug: (data: any) => void
+    api: (payload: {
+      phase: 'request' | 'response' | 'error'
+      method: string
+      url: string
+      status?: number
+      ok?: boolean
+      elapsedMs?: number
+      errno?: number
+      errmsg?: string
+      bodyPreview?: string
+      error?: string
+    }) => void
   }
   diagnostics: {
     getExportCardLogs: (options?: { limit?: number }) => Promise<{

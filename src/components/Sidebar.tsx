@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, RefreshCw, FolderClosed, Building2, Store, ChevronDown, Wrench, MapPin, Clock, UserCog, Tag, LogOut, Users, Shield, KeyRound, CalendarCheck, UsersRound, Book, Briefcase, Layers } from 'lucide-react'
+import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, RefreshCw, FolderClosed, Building2, Store, ChevronDown, Wrench, MapPin, Clock, UserCog, Tag, LogOut, Users, Shield, KeyRound, CalendarCheck, UsersRound, Book, Briefcase, Layers, RefreshCcw } from 'lucide-react'
+import { message } from 'antd'
 import { useAppStore } from '../stores/appStore'
 import { useChatStore } from '../stores/chatStore'
 import { useAnalyticsStore } from '../stores/analyticsStore'
@@ -127,6 +128,9 @@ function Sidebar({ collapsed }: SidebarProps) {
   const setLocked = useAppStore(state => state.setLocked)
   const setIsLoggedIn = useAppStore(state => state.setIsLoggedIn)
   const clearAuth = useAppStore(state => state.clearAuth)
+  const setUpdateInfo = useAppStore(state => state.setUpdateInfo)
+  const setShowUpdateDialog = useAppStore(state => state.setShowUpdateDialog)
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
   const isDbConnected = useAppStore(state => state.isDbConnected)
   const isMacPlatform = useAppStore(state => state.isMacPlatform)
   const allowedMenuIds = useAppStore(state => state.allowedMenuIds)
@@ -177,6 +181,47 @@ function Sidebar({ collapsed }: SidebarProps) {
   }
 
   const hasMenu = (ids: number[]) => ids.length === 0 || ids.some(id => allowedMenuIds.includes(id))
+
+  const handleCheckUpdate = async () => {
+    if (checkingUpdate) return
+    setCheckingUpdate(true)
+    setIsAccountMenuOpen(false)
+    try {
+      const result = await window.electronAPI?.app?.checkForUpdates?.({ manual: true })
+      if (!result) {
+        message.error('检查更新失败：环境不支持')
+        return
+      }
+      if (result.hasUpdate) {
+        setUpdateInfo(result)
+        setShowUpdateDialog(true)
+        return
+      }
+      switch (result.reason) {
+        case 'disabled':
+          message.info('当前环境已禁用自动更新')
+          break
+        case 'no-release':
+          message.warning('GitHub 未发布安装包')
+          break
+        case 'no-asset':
+          message.warning('远端未找到当前平台的安装包')
+          break
+        case 'error':
+          message.error(`检查更新失败：${result.errorMessage || '未知错误'}`)
+          break
+        case 'up-to-date':
+        case 'first-run':
+        case 'ignored':
+        default:
+          message.success('当前已是最新版本')
+      }
+    } catch (e: any) {
+      message.error(`检查更新失败：${e?.message || e}`)
+    } finally {
+      setCheckingUpdate(false)
+    }
+  }
 
   useEffect(() => {
     window.electronAPI.auth.verifyEnabled().then(setAuthEnabled)
@@ -694,6 +739,16 @@ function Sidebar({ collapsed }: SidebarProps) {
               >
                 <Settings size={14} />
                 <span>设置</span>
+              </button>
+              <button
+                className="sidebar-user-menu-item"
+                onClick={handleCheckUpdate}
+                disabled={checkingUpdate}
+                type="button"
+                role="menuitem"
+              >
+                <RefreshCcw size={14} className={checkingUpdate ? 'spin' : ''} />
+                <span>{checkingUpdate ? '检查中...' : '检查更新'}</span>
               </button>
               <button
                 className="sidebar-user-menu-item danger"

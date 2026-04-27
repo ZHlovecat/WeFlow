@@ -80,6 +80,8 @@ function App() {
     setUpdateInfo,
     isDownloading,
     setIsDownloading,
+    isDownloaded,
+    setIsDownloaded,
     downloadProgress,
     setDownloadProgress,
     showUpdateDialog,
@@ -329,31 +331,36 @@ function App() {
     setShowAnalyticsConsent(false)
   }
 
-  // 监听启动时的更新通知
+  // 监听更新通知（GitHub Releases 自定义流程）
   useEffect(() => {
-    if (isNotificationWindow) return // Skip updates in notification window
+    if (isNotificationWindow) return
 
-    const removeUpdateListener = window.electronAPI?.app?.onUpdateAvailable?.((info: any) => {
-      // 发现新版本时保存更新信息，锁定状态下不弹窗，解锁后再显示
-      if (info) {
-        window.electronAPI.app.getVersion().then((currentVersion: string) => {
-          const isMandatory = !!(info.minimumVersion && currentVersion &&
-            currentVersion.localeCompare(info.minimumVersion, undefined, { numeric: true, sensitivity: 'base' }) <= 0)
-          setUpdateInfo({ ...info, hasUpdate: true, isMandatory })
-          if (!useAppStore.getState().isLocked) {
-            setShowUpdateDialog(true)
-          }
-        })
+    const removeUpdateListener = window.electronAPI?.app?.onUpdateAvailable?.((info) => {
+      if (info && info.hasUpdate) {
+        setUpdateInfo(info)
+        if (!useAppStore.getState().isLocked) {
+          setShowUpdateDialog(true)
+        }
       }
     })
-    const removeProgressListener = window.electronAPI?.app?.onDownloadProgress?.((progress: any) => {
+    const removeProgressListener = window.electronAPI?.app?.onDownloadProgress?.((progress) => {
       setDownloadProgress(progress)
+    })
+    const removeDoneListener = window.electronAPI?.app?.onDownloadDone?.(() => {
+      setIsDownloading(false)
+      setIsDownloaded(true)
+      // 自动安装并退出
+      window.electronAPI?.app?.installAndQuit?.().catch((e: any) => {
+        console.error('安装失败:', e)
+        setUpdateError(e?.message || '安装启动失败')
+      })
     })
     return () => {
       removeUpdateListener?.()
       removeProgressListener?.()
+      removeDoneListener?.()
     }
-  }, [setUpdateInfo, setDownloadProgress, setShowUpdateDialog, isNotificationWindow])
+  }, [setUpdateInfo, setDownloadProgress, setShowUpdateDialog, setIsDownloading, setIsDownloaded, setUpdateError, isNotificationWindow])
 
   // 解锁后显示暂存的更新弹窗
   useEffect(() => {
@@ -362,35 +369,53 @@ function App() {
     }
   }, [isLocked])
 
-  const handleUpdateNow = async () => {
-    setShowUpdateDialog(false)
+  const handleStartDownload = async () => {
     setIsDownloading(true)
-    setDownloadProgress({ percent: 0 })
+    setIsDownloaded(false)
+    setDownloadProgress({ transferred: 0, total: updateInfo?.assetSize || 0, percent: 0, bytesPerSecond: 0 })
     try {
-      await window.electronAPI.app.downloadAndInstall()
+      const res = await window.electronAPI.app.downloadUpdate()
+      if (!res?.success) {
+        setIsDownloading(false)
+        setUpdateError(res?.error || '下载失败')
+      }
+      // 真正完成由 onDownloadDone 触发自动安装
     } catch (e: any) {
-      console.error('更新失败:', e)
+      console.error('下载更新失败:', e)
       setIsDownloading(false)
-      // Extract clean error message if possible
-      const errorMsg = e.message || String(e)
-      setUpdateError(errorMsg.includes('暂时禁用') ? '自动更新已暂时禁用' : errorMsg)
+      setUpdateError(e?.message || '下载失败')
+    }
+  }
+
+  const handleInstallNow = async () => {
+    try {
+      const res = await window.electronAPI.app.installAndQuit()
+      if (!res?.success) {
+        setUpdateError(res?.error || '安装失败')
+      }
+    } catch (e: any) {
+      setUpdateError(e?.message || '安装失败')
     }
   }
 
   const handleIgnoreUpdate = async () => {
-    if (!updateInfo || !updateInfo.version) return
-
-    try {
-      await window.electronAPI.app.ignoreUpdate(updateInfo.version)
+    if (!updateInfo || !updateInfo.publishedAt) {
       setShowUpdateDialog(false)
       setUpdateInfo(null)
+      return
+    }
+    try {
+      await window.electronAPI.app.ignoreUpdate(updateInfo.publishedAt)
     } catch (e: any) {
       console.error('忽略更新失败:', e)
     }
+    setShowUpdateDialog(false)
+    setUpdateInfo(null)
   }
 
   const dismissUpdate = () => {
-    setUpdateInfo(null)
+    if (isDownloading) return
+    setShowUpdateDialog(false)
   }
 
   const handleWindowCloseAction = async (
@@ -739,11 +764,12 @@ function App() {
       <UpdateDialog
         open={showUpdateDialog}
         updateInfo={updateInfo}
-        onClose={() => { if (!(updateInfo as any)?.isMandatory) setShowUpdateDialog(false) }}
-        onUpdate={handleUpdateNow}
+        onClose={dismissUpdate}
+        onDownload={handleStartDownload}
         onIgnore={handleIgnoreUpdate}
+        onInstall={handleInstallNow}
         isDownloading={isDownloading}
-        isMandatory={!!(updateInfo as any)?.isMandatory}
+        isDownloaded={isDownloaded}
         progress={downloadProgress}
       />
 

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { UpdateAvailablePayload, DownloadProgressPayload } from '../types/electron'
 
 export interface AppState {
   // 数据库状态
@@ -11,13 +12,10 @@ export interface AppState {
   loadingText: string
 
   // 更新状态
-  updateInfo: {
-    hasUpdate: boolean
-    version?: string
-    releaseNotes?: string
-  } | null
+  updateInfo: UpdateAvailablePayload | null
   isDownloading: boolean
-  downloadProgress: any
+  isDownloaded: boolean
+  downloadProgress: DownloadProgressPayload | null
   showUpdateDialog: boolean
   updateError: string | null
 
@@ -27,9 +25,10 @@ export interface AppState {
   setLoading: (loading: boolean, text?: string) => void
 
   // 更新操作
-  setUpdateInfo: (info: any) => void
+  setUpdateInfo: (info: UpdateAvailablePayload | null) => void
   setIsDownloading: (isDownloading: boolean) => void
-  setDownloadProgress: (progress: any) => void
+  setIsDownloaded: (isDownloaded: boolean) => void
+  setDownloadProgress: (progress: DownloadProgressPayload | null) => void
   setShowUpdateDialog: (show: boolean) => void
   setUpdateError: (error: string | null) => void
 
@@ -75,7 +74,8 @@ export const useAppStore = create<AppState>((set) => ({
   // 更新状态初始化
   updateInfo: null,
   isDownloading: false,
-  downloadProgress: { percent: 0 },
+  isDownloaded: false,
+  downloadProgress: null,
   showUpdateDialog: false,
   updateError: null,
 
@@ -130,7 +130,8 @@ export const useAppStore = create<AppState>((set) => ({
   setIsMacPlatform: (isMac) => set({ isMacPlatform: isMac }),
 
   setUpdateInfo: (info) => set({ updateInfo: info, updateError: null }),
-  setIsDownloading: (isDownloading) => set({ isDownloading: isDownloading }),
+  setIsDownloading: (isDownloading) => set({ isDownloading }),
+  setIsDownloaded: (isDownloaded) => set({ isDownloaded }),
   setDownloadProgress: (progress) => set({ downloadProgress: progress }),
   setShowUpdateDialog: (show) => set({ showUpdateDialog: show }),
   setUpdateError: (error) => set({ updateError: error }),
@@ -149,7 +150,8 @@ export const useAppStore = create<AppState>((set) => ({
       isLoggedIn: false,
       updateInfo: null,
       isDownloading: false,
-      downloadProgress: { percent: 0 },
+      isDownloaded: false,
+      downloadProgress: null,
       showUpdateDialog: false,
       updateError: null
     })

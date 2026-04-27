@@ -15,21 +15,15 @@ const UpdateProgressCapsule: React.FC = () => {
         setUpdateError
     } = useAppStore()
 
-    // Control visibility
-    // If dialog is open, we usually hide the capsule UNLESS we want it as a mini-indicator
-    // For now, let's hide it if the dialog is open
     if (showUpdateDialog) return null
 
-    // State mapping
     const hasError = !!updateError
     const hasUpdate = !!updateInfo && updateInfo.hasUpdate
 
     if (!hasError && !isDownloading && !hasUpdate) return null
 
-    // Safe normalize progress
-    const safeProgress = typeof downloadProgress === 'number' ? { percent: downloadProgress } : (downloadProgress || { percent: 0 })
-    const percent = safeProgress.percent || 0
-    const bytesPerSecond = safeProgress.bytesPerSecond
+    const percent = downloadProgress?.percent || 0
+    const bytesPerSecond = downloadProgress?.bytesPerSecond || 0
 
     const formatBytes = (bytes: number) => {
         if (!Number.isFinite(bytes) || bytes === 0) return '0 B'
@@ -40,9 +34,7 @@ const UpdateProgressCapsule: React.FC = () => {
         return parseFloat((bytes / Math.pow(k, unitIndex)).toFixed(1)) + ' ' + sizes[unitIndex]
     }
 
-    const formatSpeed = (bps: number) => {
-        return `${formatBytes(bps)}/s`
-    }
+    const formatSpeed = (bps: number) => `${formatBytes(bps)}/s`
 
     const handleClose = (e: React.MouseEvent) => {
         e.stopPropagation()
@@ -53,7 +45,6 @@ const UpdateProgressCapsule: React.FC = () => {
         }
     }
 
-    // Determine appearance class and content
     let capsuleClass = 'update-progress-capsule'
     let content = null
 
@@ -95,7 +86,7 @@ const UpdateProgressCapsule: React.FC = () => {
                     <Info size={14} />
                 </div>
                 <div className="info-wrapper">
-                    <span className="available-text">发现新版本 v{updateInfo?.version}</span>
+                    <span className="available-text">发现新版本 {updateInfo?.version || ''}</span>
                 </div>
             </>
         )

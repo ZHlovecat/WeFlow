@@ -12,7 +12,6 @@ import { app, BrowserWindow, ipcMain, nativeTheme, session, Tray, Menu, nativeIm
 import { Worker } from 'worker_threads'
 import { randomUUID } from 'crypto'
 import { join, dirname } from 'path'
-import { autoUpdater } from 'electron-updater'
 import { readFile, writeFile, mkdir, rm, readdir, copyFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { ConfigService } from './services/config'
@@ -35,165 +34,17 @@ import { contactExportService } from './services/contactExportService'
 import { windowsHelloService } from './services/windowsHelloService'
 import { exportCardDiagnosticsService } from './services/exportCardDiagnosticsService'
 import { cloudControlService } from './services/cloudControlService'
+import { githubUpdaterService } from './services/githubUpdaterService'
 
 import { destroyNotificationWindow, registerNotificationHandlers, showNotification, setNotificationNavigateHandler } from './windows/notificationWindow'
 import { httpService } from './services/httpService'
 import { messagePushService } from './services/messagePushService'
 import { bizService } from './services/bizService'
 
-// 配置自动更新
-autoUpdater.autoDownload = false
-autoUpdater.autoInstallOnAppQuit = true
-autoUpdater.disableDifferentialDownload = true  // 禁用差分更新，强制全量下载
-// 更新通道策略：
-// - 稳定版（如 4.3.0）默认走 latest
-// - 预览版（如 0.26.2）默认走 preview（0.年.当年发布序号）
-// - 开发版（如 26.4.5）默认走 dev（年.月.日）
-// - 用户可在设置页切换稳定/预览/开发，切换后即时生效
-// 同时区分 Windows x64 / arm64，避免更新清单互相覆盖。
+// 自定义 GitHub Releases 更新流程已替代 electron-updater
 const appVersion = app.getVersion()
-const inferUpdateTrackFromVersion = (version: string): 'stable' | 'preview' | 'dev' => {
-  const normalized = String(version || '').trim().replace(/^v/i, '')
-  if (/^0\.\d{2}\.\d+$/i.test(normalized)) return 'preview'
-  if (/^\d{2}\.\d{1,2}\.\d{1,2}$/i.test(normalized)) return 'dev'
-  // 兼容旧版命名（如 4.3.0-preview.26.1 / 4.3.0-dev.26.3.4）
-  if (/-preview\.\d+\.\d+$/i.test(normalized)) return 'preview'
-  if (/-dev\.\d+\.\d+\.\d+$/i.test(normalized)) return 'dev'
-  // 兼容 alpha/beta/rc 预发布
-  if (/(alpha|beta|rc)/i.test(normalized)) return 'dev'
-  return 'stable'
-}
-
-const defaultUpdateTrack: 'stable' | 'preview' | 'dev' = (() => {
-  const inferred = inferUpdateTrackFromVersion(appVersion)
-  if (inferred === 'preview' || inferred === 'dev') return inferred
-  return 'stable'
-})()
 let configService: ConfigService | null = null
 
-const normalizeUpdateTrack = (raw: unknown): 'stable' | 'preview' | 'dev' | null => {
-  if (raw === 'stable' || raw === 'preview' || raw === 'dev') return raw
-  return null
-}
-
-const getEffectiveUpdateTrack = (): 'stable' | 'preview' | 'dev' => {
-  const configuredTrack = normalizeUpdateTrack(configService?.get('updateChannel'))
-  return configuredTrack || defaultUpdateTrack
-}
-
-const isRemoteVersionNewer = (latestVersion: string, currentVersion: string): boolean => {
-  const latest = String(latestVersion || '').trim()
-  const current = String(currentVersion || '').trim()
-  if (!latest || !current) return false
-
-  const parseVersion = (version: string) => {
-    const normalized = version.replace(/^v/i, '')
-    const [main, pre = ''] = normalized.split('-', 2)
-    const core = main.split('.').map((segment) => Number.parseInt(segment, 10) || 0)
-    const prerelease = pre ? pre.split('.').map((segment) => /^\d+$/.test(segment) ? Number.parseInt(segment, 10) : segment) : []
-    return { core, prerelease }
-  }
-
-  const compareParsedVersion = (a: ReturnType<typeof parseVersion>, b: ReturnType<typeof parseVersion>): number => {
-    const maxLen = Math.max(a.core.length, b.core.length)
-    for (let i = 0; i < maxLen; i += 1) {
-      const left = a.core[i] || 0
-      const right = b.core[i] || 0
-      if (left > right) return 1
-      if (left < right) return -1
-    }
-
-    const aPre = a.prerelease
-    const bPre = b.prerelease
-    if (aPre.length === 0 && bPre.length === 0) return 0
-    if (aPre.length === 0) return 1
-    if (bPre.length === 0) return -1
-
-    const preMaxLen = Math.max(aPre.length, bPre.length)
-    for (let i = 0; i < preMaxLen; i += 1) {
-      const left = aPre[i]
-      const right = bPre[i]
-      if (left === undefined) return -1
-      if (right === undefined) return 1
-      if (left === right) continue
-
-      const leftNum = typeof left === 'number'
-      const rightNum = typeof right === 'number'
-      if (leftNum && rightNum) return left > right ? 1 : -1
-      if (leftNum) return -1
-      if (rightNum) return 1
-      return String(left) > String(right) ? 1 : -1
-    }
-
-    return 0
-  }
-
-  try {
-    return autoUpdater.currentVersion.compare(latest) < 0
-  } catch {
-    return compareParsedVersion(parseVersion(latest), parseVersion(current)) > 0
-  }
-}
-
-const shouldOfferUpdateForTrack = (latestVersion: string, currentVersion: string): boolean => {
-  if (isRemoteVersionNewer(latestVersion, currentVersion)) return true
-  const effectiveTrack = getEffectiveUpdateTrack()
-  const currentTrack = inferUpdateTrackFromVersion(currentVersion)
-  // 切换通道后，目标通道最新版本与当前版本不同即提示更新（即使是降级）
-  if (effectiveTrack !== currentTrack && latestVersion !== currentVersion) return true
-  return false
-}
-
-let lastAppliedUpdaterChannel: string | null = null
-let lastAppliedUpdaterFeedUrl: string | null = null
-const resetUpdaterProviderCache = () => {
-  const updater = autoUpdater as any
-  // electron-updater 会缓存 provider；切换 channel 后需清理缓存，避免仍请求旧通道
-  for (const key of ['clientPromise', '_clientPromise', 'updateInfoAndProvider']) {
-    if (Object.prototype.hasOwnProperty.call(updater, key)) {
-      updater[key] = null
-    }
-  }
-}
-
-const getUpdaterFeedUrlByTrack = (track: 'stable' | 'preview' | 'dev'): string => {
-  const repoBase = 'https://github.com/hicccc77/WeFlow/releases'
-  if (track === 'stable') return `${repoBase}/latest/download`
-  if (track === 'preview') return `${repoBase}/download/nightly-preview`
-  return `${repoBase}/download/nightly-dev`
-}
-
-const applyAutoUpdateChannel = (reason: 'startup' | 'settings' = 'startup') => {
-  const track = getEffectiveUpdateTrack()
-  const currentTrack = inferUpdateTrackFromVersion(appVersion)
-  const baseUpdateChannel = track === 'stable' ? 'latest' : track
-  const nextFeedUrl = getUpdaterFeedUrlByTrack(track)
-  const nextUpdaterChannel =
-    process.platform === 'win32' && process.arch === 'arm64'
-      ? `${baseUpdateChannel}-arm64`
-      : baseUpdateChannel
-  if (
-    (lastAppliedUpdaterChannel && lastAppliedUpdaterChannel !== nextUpdaterChannel) ||
-    (lastAppliedUpdaterFeedUrl && lastAppliedUpdaterFeedUrl !== nextFeedUrl)
-  ) {
-    resetUpdaterProviderCache()
-  }
-  autoUpdater.allowPrerelease = track !== 'stable'
-  // 只要用户当前选择的目标通道与当前安装版本所属通道不同，就允许跨通道更新（含降级）
-  autoUpdater.allowDowngrade = track !== currentTrack
-  // 统一走 generic feed，确保 preview/dev 命中各自固定发布页，不受 GitHub provider 的 prerelease 选择影响。
-  autoUpdater.setFeedURL({
-    provider: 'generic',
-    url: nextFeedUrl,
-    channel: nextUpdaterChannel
-  })
-  autoUpdater.channel = nextUpdaterChannel
-  lastAppliedUpdaterChannel = nextUpdaterChannel
-  lastAppliedUpdaterFeedUrl = nextFeedUrl
-  console.log(`[Update](${reason}) 当前版本 ${appVersion}，当前轨道: ${currentTrack}，渠道偏好: ${track}，更新通道: ${autoUpdater.channel}，feed=${nextFeedUrl}，allowDowngrade=${autoUpdater.allowDowngrade}`)
-}
-
-applyAutoUpdateChannel('startup')
 const AUTO_UPDATE_ENABLED =
   process.env.AUTO_UPDATE_ENABLED === 'true' ||
   process.env.AUTO_UPDATE_ENABLED === '1' ||
@@ -386,11 +237,6 @@ const chatHistoryPayloadStore = new Map<string, { sessionId: string; title?: str
 
 type WindowCloseBehavior = 'ask' | 'tray' | 'quit'
 
-// 更新下载状态管理（Issue #294 修复）
-let isDownloadInProgress = false
-let downloadProgressHandler: ((progress: any) => void) | null = null
-let downloadedHandler: (() => void) | null = null
-
 const normalizeReleaseNotes = (rawReleaseNotes: unknown): string => {
   const merged = (() => {
     if (typeof rawReleaseNotes === 'string') {
@@ -508,13 +354,8 @@ const normalizeReleaseNotes = (rawReleaseNotes: unknown): string => {
   return cleaned
 }
 
-const getDialogReleaseNotes = (rawReleaseNotes: unknown): string => {
-  const track = getEffectiveUpdateTrack()
-  if (track !== 'stable') {
-    return '修复了一些已知问题'
-  }
-  return normalizeReleaseNotes(rawReleaseNotes)
-}
+// normalizeReleaseNotes 仅留作工具函数（旧 electron-updater 已弃用）；新更新流程走 githubUpdaterService 直接使用 release.body
+void normalizeReleaseNotes
 
 type AnnualReportYearsLoadStrategy = 'cache' | 'native' | 'hybrid'
 type AnnualReportYearsLoadPhase = 'cache' | 'native' | 'scan' | 'done'
@@ -1631,9 +1472,6 @@ function registerIpcHandlers() {
     } else {
       result = configService?.set(key as any, value)
     }
-    if (key === 'updateChannel') {
-      applyAutoUpdateChannel('settings')
-    }
     void messagePushService.handleConfigChanged(key)
     return result
   })
@@ -1727,6 +1565,41 @@ function registerIpcHandlers() {
     }
   })
 
+  // 渲染进程 API 调用日志（终端调试用）
+  ipcMain.on('log:api', (_, payload: {
+    phase: 'request' | 'response' | 'error'
+    method: string
+    url: string
+    status?: number
+    ok?: boolean
+    elapsedMs?: number
+    errno?: number
+    errmsg?: string
+    bodyPreview?: string
+    error?: string
+  }) => {
+    if (!payload || typeof payload !== 'object') return
+    const ts = new Date().toISOString().slice(11, 23)
+    const method = (payload.method || 'GET').toUpperCase()
+    const url = payload.url || ''
+    if (payload.phase === 'request') {
+      console.log(`[API ${ts}] → ${method} ${url}${payload.bodyPreview ? `  body=${payload.bodyPreview}` : ''}`)
+      return
+    }
+    if (payload.phase === 'response') {
+      const elapsed = typeof payload.elapsedMs === 'number' ? `${payload.elapsedMs}ms` : '-'
+      const errnoText = typeof payload.errno === 'number' ? ` errno=${payload.errno}` : ''
+      const errmsgText = payload.errmsg ? ` errmsg=${payload.errmsg}` : ''
+      const flag = payload.ok && payload.errno === 0 ? '✓' : '✗'
+      console.log(`[API ${ts}] ${flag} ${method} ${url}  ${payload.status ?? '-'} ${elapsed}${errnoText}${errmsgText}`)
+      return
+    }
+    if (payload.phase === 'error') {
+      const elapsed = typeof payload.elapsedMs === 'number' ? `${payload.elapsedMs}ms` : '-'
+      console.log(`[API ${ts}] ✗ ${method} ${url}  network-error ${elapsed}  ${payload.error || ''}`)
+    }
+  })
+
   ipcMain.handle('diagnostics:getExportCardLogs', async (_, options?: { limit?: number }) => {
     return exportCardDiagnosticsService.snapshot(options?.limit)
   })
@@ -1760,102 +1633,34 @@ function registerIpcHandlers() {
     return cloudControlService.getLogs()
   })
 
-  ipcMain.handle('app:checkForUpdates', async () => {
+  ipcMain.handle('app:checkForUpdates', async (_event, opts?: { manual?: boolean }) => {
     if (!AUTO_UPDATE_ENABLED) {
-      return { hasUpdate: false }
+      return { hasUpdate: false, reason: 'disabled' }
     }
-    // 每次主动检查前重新应用一次通道配置，确保使用最新选择的更新通道。
-    applyAutoUpdateChannel('settings')
-    try {
-      const result = await autoUpdater.checkForUpdates()
-      if (result && result.updateInfo) {
-        const currentVersion = app.getVersion()
-        const latestVersion = result.updateInfo.version
-        if (shouldOfferUpdateForTrack(latestVersion, currentVersion)) {
-          return {
-            hasUpdate: true,
-            version: latestVersion,
-            releaseNotes: getDialogReleaseNotes(result.updateInfo.releaseNotes),
-            minimumVersion: (result.updateInfo as any).minimumVersion
-          }
-        }
-      }
-      return { hasUpdate: false }
-    } catch (error) {
-      console.error('检查更新失败:', error)
-      return { hasUpdate: false }
-    }
+    return githubUpdaterService.checkForUpdates(!!opts?.manual)
   })
 
-  ipcMain.handle('app:downloadAndInstall', async (event) => {
+  ipcMain.handle('app:downloadUpdate', async (event) => {
     if (!AUTO_UPDATE_ENABLED) {
-      throw new Error('自动更新已暂时禁用')
+      return { success: false, error: '自动更新已暂时禁用' }
     }
-
-    // 防止重复下载（Issue #294 修复）
-    if (isDownloadInProgress) {
-      throw new Error('更新正在下载中，请稍候')
-    }
-
-    isDownloadInProgress = true
     const win = BrowserWindow.fromWebContents(event.sender)
-
-    // 清理旧的监听器（Issue #294 修复：防止监听器泄漏）
-    if (downloadProgressHandler) {
-      autoUpdater.removeListener('download-progress', downloadProgressHandler)
-      downloadProgressHandler = null
-    }
-    if (downloadedHandler) {
-      autoUpdater.removeListener('update-downloaded', downloadedHandler)
-      downloadedHandler = null
-    }
-
-    // 创建新的监听器并保存引用
-    downloadProgressHandler = (progress) => {
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('app:downloadProgress', progress)
-      }
-    }
-
-    downloadedHandler = () => {
-      console.log('[Update] 更新下载完成，准备安装')
-      if (downloadProgressHandler) {
-        autoUpdater.removeListener('download-progress', downloadProgressHandler)
-        downloadProgressHandler = null
-      }
-      downloadedHandler = null
-      isDownloadInProgress = false
-      autoUpdater.quitAndInstall(false, true)
-    }
-
-    autoUpdater.on('download-progress', downloadProgressHandler)
-    autoUpdater.once('update-downloaded', downloadedHandler)
-
-    try {
-      console.log('[Update] 开始下载更新...')
-      await autoUpdater.downloadUpdate()
-    } catch (error: any) {
-      console.error('[Update] 下载更新失败:', error)
-      // 失败时清理状态和监听器
-      isDownloadInProgress = false
-      if (downloadProgressHandler) {
-        autoUpdater.removeListener('download-progress', downloadProgressHandler)
-        downloadProgressHandler = null
-      }
-      if (downloadedHandler) {
-        autoUpdater.removeListener('update-downloaded', downloadedHandler)
-        downloadedHandler = null
-      }
-      
-      // 统一错误提示格式，避免出现 [object Object] 的 JSON 字符串
-      const errorMessage = error.message || (typeof error === 'string' ? error : JSON.stringify(error))
-      throw new Error(errorMessage)
-    }
+    if (!win) return { success: false, error: '窗口已关闭' }
+    return githubUpdaterService.downloadUpdate(win)
   })
 
-  ipcMain.handle('app:ignoreUpdate', async (_, version: string) => {
-    configService?.set('ignoredUpdateVersion', version)
+  ipcMain.handle('app:cancelDownload', async () => {
+    githubUpdaterService.cancelDownload()
     return { success: true }
+  })
+
+  ipcMain.handle('app:installAndQuit', async () => {
+    return githubUpdaterService.installAndQuit()
+  })
+
+  ipcMain.handle('app:ignoreUpdate', async (_, payload?: string | { publishedAt?: string }) => {
+    const publishedAt = typeof payload === 'string' ? payload : payload?.publishedAt
+    return githubUpdaterService.ignoreUpdate(publishedAt)
   })
 
   // 窗口控制
@@ -3401,39 +3206,19 @@ function registerIpcHandlers() {
 // 主窗口引用
 let mainWindow: BrowserWindow | null = null
 
-// 启动时自动检测更新
+// 启动时自动检测更新（GitHub Releases）
 function checkForUpdatesOnStartup() {
   if (!AUTO_UPDATE_ENABLED) return
-  // 开发环境不检测更新
   if (process.env.VITE_DEV_SERVER_URL) return
 
-  // 延迟3秒检测，等待窗口完全加载
   setTimeout(async () => {
     try {
-      const result = await autoUpdater.checkForUpdates()
-      if (result && result.updateInfo) {
-        const currentVersion = app.getVersion()
-        const latestVersion = result.updateInfo.version
-
-        // 检查是否有新版本
-        if (shouldOfferUpdateForTrack(latestVersion, currentVersion) && mainWindow) {
-          // 检查该版本是否被用户忽略
-          const ignoredVersion = configService?.get('ignoredUpdateVersion')
-          if (ignoredVersion === latestVersion) {
-
-            return
-          }
-
-          // 通知渲染进程有新版本
-          mainWindow.webContents.send('app:updateAvailable', {
-            version: latestVersion,
-            releaseNotes: getDialogReleaseNotes(result.updateInfo.releaseNotes),
-            minimumVersion: (result.updateInfo as any).minimumVersion
-          })
-        }
+      const result = await githubUpdaterService.checkForUpdates(false)
+      if (result.hasUpdate && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:updateAvailable', result)
       }
     } catch (error) {
-      console.error('启动时检查更新失败:', error)
+      console.error('[Update] 启动时检查更新失败:', error)
     }
   }, 3000)
 }
@@ -3461,7 +3246,7 @@ app.whenReady().then(async () => {
   // 初始化配置服务
   updateSplashProgress(5, '正在加载配置...')
   configService = new ConfigService()
-  applyAutoUpdateChannel('startup')
+  githubUpdaterService.init(configService)
   syncLaunchAtStartupPreference()
 
   // 将用户主题配置推送给 Splash 窗口
