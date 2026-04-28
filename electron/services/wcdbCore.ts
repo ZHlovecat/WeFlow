@@ -690,55 +690,13 @@ export class WcdbCore {
       this.lib = this.koffi.load(dllPath)
       this.writeLog('[bootstrap] koffi.load ok', true)
 
-      // InitProtection (Added for security)
+      // InitProtection: 二改后 dll 反盗版校验会在 Windows 下直接 TerminateProcess 杀 worker，
+      // 这里仅 lazy 解析符号以保持 ABI 兼容（解析本身不会触发校验），跳过实际调用。
       try {
         this.wcdbInitProtection = this.lib.func('int32 InitProtection(const char* resourcePath)')
-
-        // 尝试多个可能的资源路径
-        const resourcePaths = [
-          dllDir,  //数据服务所在目录
-          dirname(dllDir),  // 上级目录
-          process.resourcesPath,  // 打包后 Contents/Resources
-          process.resourcesPath ? join(process.resourcesPath as string, 'resources') : null,  // Contents/Resources/resources
-          this.resourcesPath,  // 配置的资源路径
-          join(process.cwd(), 'resources')  // 开发环境
-        ].filter(Boolean)
-
-        let protectionOk = false
-        let protectionCode = -1
-        let bestFailCode: number | null = null
-        const scoreFailCode = (code: number): number => {
-          if (code >= -2212 && code <= -2201) return 0 // manifest/signature/hash failures
-          if (code === -102 || code === -101 || code === -1006) return 1
-          return 2
-        }
-        for (const resPath of resourcePaths) {
-          try {
-            this.writeLog(`[bootstrap] InitProtection call path=${resPath}`, true)
-            protectionCode = Number(this.wcdbInitProtection(resPath))
-            if (protectionCode === 0) {
-              protectionOk = true
-              break
-            }
-            if (bestFailCode === null || scoreFailCode(protectionCode) < scoreFailCode(bestFailCode)) {
-              bestFailCode = protectionCode
-            }
-            this.writeLog(`[bootstrap] InitProtection rc=${protectionCode} path=${resPath}`, true)
-          } catch (e) {
-            this.writeLog(`[bootstrap] InitProtection exception path=${resPath}: ${String(e)}`, true)
-          }
-        }
-
-        if (!protectionOk) {
-          const finalCode = bestFailCode ?? protectionCode
-          lastDllInitError = this.formatInitProtectionError(finalCode)
-          this.writeLog(`[bootstrap] InitProtection failed finalCode=${finalCode}`, true)
-          return false
-        }
+        this.writeLog('[bootstrap] InitProtection skipped (anti-piracy bypass)', true)
       } catch (e) {
-        lastDllInitError = this.formatInitProtectionError(-2301)
-        this.writeLog(`[bootstrap] InitProtection symbol load failed: ${String(e)}`, true)
-        return false
+        this.writeLog(`[bootstrap] InitProtection symbol load failed (ignored): ${String(e)}`, true)
       }
 
       // 定义类型

@@ -1,6 +1,6 @@
 {
   "name": "renlicang-desktop",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "浅雨科技人力仓系统",
   "main": "dist-electron/main.js",
   "author": {
