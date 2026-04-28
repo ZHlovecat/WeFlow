@@ -2,6 +2,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProper
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { createPortal } from 'react-dom'
+import { Modal as AntdModal, Button as AntdButton, Radio as AntdRadio, Tag as AntdTag, Space as AntdSpace } from 'antd'
+import { FolderOpenOutlined, DownloadOutlined } from '@ant-design/icons'
 import {
   Aperture,
   Calendar,
@@ -10,7 +12,6 @@ import {
   CircleHelp,
   Copy,
   Database,
-  Download,
   ExternalLink,
   File as FileIcon,
   FolderOpen,
@@ -4938,8 +4939,10 @@ function ExportPage() {
     }
   }, [])
 
-  const createTask = async () => {
-    if (!exportDialog.open || !exportFolder) return
+  const createTask = async (overrideFolder?: string) => {
+    if (!exportDialog.open) return
+    const targetFolder = overrideFolder || exportFolder
+    if (!targetFolder) return
     if (exportDialog.scope !== 'sns' && exportDialog.sessionIds.length === 0) return
 
     const exportOptions = exportDialog.scope === 'sns'
@@ -4966,7 +4969,7 @@ function ExportPage() {
       payload: {
         sessionIds: exportDialog.sessionIds,
         sessionNames: exportDialog.sessionNames,
-        outputDir: exportFolder,
+        outputDir: targetFolder,
         options: exportOptions,
         scope: exportDialog.scope,
         contentType: exportDialog.contentType,
@@ -6387,6 +6390,37 @@ function ExportPage() {
     }
   }, [exportDialog.open])
 
+  useEffect(() => {
+    if (!exportDialog.open) return
+    if (exportDialog.scope !== 'single' && exportDialog.scope !== 'multi') return
+    setOptions(prev => ({
+      ...prev,
+      format: 'json',
+      exportImages: false,
+      exportVoices: false,
+      exportVideos: false,
+      exportEmojis: false,
+      exportFiles: false,
+      exportMedia: false,
+      exportVoiceAsText: false,
+      imageDeepSearchOnMiss: false,
+      displayNamePreference: 'nickname'
+    }))
+  }, [exportDialog.open, exportDialog.scope])
+
+  const chooseFolderAndCreateTask = useCallback(async () => {
+    if (!exportDialog.open) return
+    const result = await window.electronAPI.dialog.openFile({
+      title: '选择导出目录',
+      properties: ['openDirectory']
+    })
+    if (result.canceled || !result.filePaths.length) return
+    const nextPath = result.filePaths[0]
+    setExportFolder(nextPath)
+    await configService.setExportPath(nextPath)
+    await createTask(nextPath)
+  }, [exportDialog.open, createTask])
+
   const handleCopyDetailField = useCallback(async (text: string, field: string) => {
     try {
       await navigator.clipboard.writeText(text)
@@ -6469,9 +6503,12 @@ function ExportPage() {
   ), [filteredContacts, sessionRowByUsername])
   const isAllVisibleSelected = visibleSelectableCount > 0 && selectedCount === visibleSelectableCount
 
-  const canCreateTask = exportDialog.scope === 'sns'
-    ? Boolean(exportFolder)
-    : Boolean(exportFolder) && exportDialog.sessionIds.length > 0
+  const isSessionScopeForCanCreate = exportDialog.scope === 'single' || exportDialog.scope === 'multi'
+  const canCreateTask = isSessionScopeForCanCreate
+    ? exportDialog.sessionIds.length > 0
+    : exportDialog.scope === 'sns'
+      ? Boolean(exportFolder)
+      : Boolean(exportFolder) && exportDialog.sessionIds.length > 0
   const scopeLabel = exportDialog.scope === 'single'
     ? '单会话'
     : exportDialog.scope === 'multi'
@@ -8170,321 +8207,334 @@ function ExportPage() {
         </div>
       </div>
 
-      {exportDialog.open && createPortal(
-        <div className="export-dialog-overlay" onClick={closeExportDialog}>
-          <div className="export-dialog" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-            <div className="dialog-header">
-              <div className="dialog-header-copy">
-                <h3>{exportDialog.title}</h3>
-                {isContentTextDialog && (
-                  <div className="dialog-header-note">{contentTextDialogSummary}</div>
+      <AntdModal
+        open={exportDialog.open}
+        onCancel={closeExportDialog}
+        centered
+        destroyOnClose
+        width={isSessionScopeDialog ? 540 : 860}
+        title={
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)' }}>{exportDialog.title}</div>
+            {isContentTextDialog && (
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4, fontWeight: 400 }}>{contentTextDialogSummary}</div>
+            )}
+          </div>
+        }
+        footer={
+          <AntdSpace>
+            <AntdButton onClick={closeExportDialog}>取消</AntdButton>
+            {isSessionScopeDialog ? (
+              <AntdButton
+                type="primary"
+                icon={<FolderOpenOutlined />}
+                onClick={() => void chooseFolderAndCreateTask()}
+                disabled={!canCreateTask}
+              >
+                选择导出地址
+              </AntdButton>
+            ) : (
+              <AntdButton
+                type="primary"
+                icon={<DownloadOutlined />}
+                onClick={() => void createTask()}
+                disabled={!canCreateTask}
+              >
+                创建导出任务
+              </AntdButton>
+            )}
+          </AntdSpace>
+        }
+        styles={{ body: { padding: 0 } }}
+      >
+        <div className="dialog-body" style={{ maxHeight: '70vh', padding: '4px 12px 4px 4px' }}>
+          {exportDialog.scope !== 'single' && (
+            <div className="dialog-section">
+              <h4>导出范围</h4>
+              <div className="scope-tag-row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <AntdTag color="blue">{scopeLabel}</AntdTag>
+                <AntdTag>{scopeCountLabel}</AntdTag>
+              </div>
+              <div className="scope-list">
+                {exportDialog.sessionNames.slice(0, 20).map(name => (
+                  <AntdTag key={name} style={{ marginTop: 6 }}>{name}</AntdTag>
+                ))}
+                {exportDialog.sessionNames.length > 20 && (
+                  <AntdTag style={{ marginTop: 6 }}>... 还有 {exportDialog.sessionNames.length - 20} 个</AntdTag>
                 )}
               </div>
-              <button className="close-icon-btn" onClick={closeExportDialog}><X size={16} /></button>
             </div>
+          )}
 
-            <div className="dialog-body">
-              {exportDialog.scope !== 'single' && (
-                <div className="dialog-section">
-                  <h4>导出范围</h4>
-                  <div className="scope-tag-row">
-                    <span className="scope-tag">{scopeLabel}</span>
-                    <span className="scope-count">{scopeCountLabel}</span>
-                  </div>
-                  <div className="scope-list">
-                    {exportDialog.sessionNames.slice(0, 20).map(name => (
-                      <span key={name} className="scope-item">{name}</span>
-                    ))}
-                    {exportDialog.sessionNames.length > 20 && <span className="scope-item">... 还有 {exportDialog.sessionNames.length - 20} 个</span>}
-                  </div>
-                </div>
-              )}
-
-              {shouldShowFormatSection && (
-                <div className="dialog-section">
-                  {useCollapsedSessionFormatSelector ? (
-                    <div className="section-header-action">
-                      <h4>对话文本导出格式选择</h4>
-                      <div className="dialog-format-select" ref={sessionFormatDropdownRef}>
-                        <button
-                          type="button"
-                          className={`time-range-trigger dialog-format-trigger ${showSessionFormatSelect ? 'open' : ''}`}
-                          onClick={() => setShowSessionFormatSelect(prev => !prev)}
-                        >
-                          <span className="dialog-format-trigger-label">{activeDialogFormatLabel}</span>
-                          <span className="time-range-arrow">&gt;</span>
-                        </button>
-                        {showSessionFormatSelect && (
-                          <div className="dialog-format-dropdown">
-                            {formatOptions.map(option => (
-                              <button
-                                key={option.value}
-                                type="button"
-                                className={`dialog-format-option ${options.format === option.value ? 'active' : ''}`}
-                                onClick={() => {
-                                  setOptions(prev => ({ ...prev, format: option.value as TextExportFormat }))
-                                  setShowSessionFormatSelect(false)
-                                }}
-                              >
-                                <span className="option-label">{option.label}</span>
-                                <span className="option-desc">{option.desc}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <h4>{exportDialog.scope === 'sns' ? '朋友圈导出格式选择' : '对话文本导出格式选择'}</h4>
-                  )}
-                  {!isContentScopeDialog && exportDialog.scope !== 'sns' && (
-                    <div className="format-note">{avatarExportStatusLabel}</div>
-                  )}
-                  {isContentTextDialog && (
-                    <div className="format-note">{avatarExportStatusLabel}</div>
-                  )}
-                  {!useCollapsedSessionFormatSelector && (
-                    <div className="format-grid">
-                      {formatCandidateOptions.map(option => (
-                        <button
-                          key={option.value}
-                          className={`format-card ${exportDialog.scope === 'sns'
-                            ? (snsExportFormat === option.value ? 'active' : '')
-                            : (options.format === option.value ? 'active' : '')}`}
-                          onClick={() => {
-                            if (exportDialog.scope === 'sns') {
-                              setSnsExportFormat(option.value as SnsTimelineExportFormat)
-                            } else {
-                              setOptions(prev => ({ ...prev, format: option.value as TextExportFormat }))
-                            }
-                          }}
-                        >
-                          <div className="format-label">{option.label}</div>
-                          <div className="format-desc">{option.desc}</div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-
-
-              <div className="dialog-section">
+          {shouldShowFormatSection && !isSessionScopeDialog && (
+            <div className="dialog-section">
+              {useCollapsedSessionFormatSelector ? (
                 <div className="section-header-action">
-                  <h4>时间范围</h4>
-                  <button
-                    type="button"
-                    className="time-range-trigger"
-                    onClick={openTimeRangeDialog}
-                    disabled={isResolvingTimeRangeBounds}
-                  >
-                    <span>{isResolvingTimeRangeBounds ? '正在统计可选时间...' : timeRangeSummaryLabel}</span>
-                    <span className="time-range-arrow">&gt;</span>
-                  </button>
-                </div>
-              </div>
-
-              {shouldShowMediaSection && (
-                <div className="dialog-section">
-                  <div className="section-header-action media-section-header">
-                    <h4>{exportDialog.scope === 'sns' ? '媒体文件（可多选）' : '媒体内容'}</h4>
-                    <span className="media-selection-pill">{mediaSelectionSummaryLabel}</span>
-                  </div>
-                  <div className="media-option-grid">
-                    {dialogMediaOptions.map(option => {
-                      const Icon = option.icon
-                      return (
-                        <label key={option.key} className={`media-option-card ${option.checked ? 'active' : ''}`}>
-                          <input
-                            className="media-option-input"
-                            type="checkbox"
-                            checked={option.checked}
-                            onChange={event => option.onToggle(event.target.checked)}
-                          />
-                          <span className="media-option-main">
-                            <span className="media-option-icon">
-                              <Icon size={16} />
-                            </span>
-                            <span className="media-option-text">
-                              <span className="media-option-label">{option.label}</span>
-                              <span className="media-option-desc">{option.desc}</span>
-                            </span>
-                          </span>
-                          <span className={`media-option-check ${option.checked ? 'active' : ''}`}>
-                            <Check size={12} />
-                          </span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                  {exportDialog.scope !== 'sns' && (
-                    <div
-                      className={`dialog-collapse-slot ${options.exportFiles ? 'open' : ''}`}
-                      aria-hidden={!options.exportFiles}
+                  <h4>对话文本导出格式选择</h4>
+                  <div className="dialog-format-select" ref={sessionFormatDropdownRef}>
+                    <button
+                      type="button"
+                      className={`time-range-trigger dialog-format-trigger ${showSessionFormatSelect ? 'open' : ''}`}
+                      onClick={() => setShowSessionFormatSelect(prev => !prev)}
                     >
-                      <div className="dialog-collapse-inner">
-                        <div className="file-size-subsection">
-                          <div className="file-size-subsection-header">
-                            <div className="file-size-heading">文件大小上限</div>
-                            <div className="file-size-current">{fileSizeLimitLabel}</div>
-                          </div>
-                          <div className="file-size-note">
-                            文件导出优先使用消息中的 MD5 做校验；设置上限后，只导出不超过该值的文件。
-                          </div>
-                          <div className="file-size-preset-row">
-                            {FILE_SIZE_PRESETS_MB.map(preset => (
-                              <button
-                                key={preset}
-                                type="button"
-                                className={`file-size-preset-btn ${options.maxFileSizeMb === preset ? 'active' : ''}`}
-                                onClick={() => setOptions(prev => ({ ...prev, maxFileSizeMb: preset }))}
-                              >
-                                {preset === 0 ? '不限' : `${preset}MB`}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="dialog-input-row">
-                            <input
-                              type="number"
-                              min={0}
-                              step={10}
-                              value={options.maxFileSizeMb}
-                              onChange={event => {
-                                const raw = Number(event.target.value)
-                                setOptions(prev => ({ ...prev, maxFileSizeMb: Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0 }))
-                              }}
-                            />
-                            <span>MB</span>
-                          </div>
-                        </div>
+                      <span className="dialog-format-trigger-label">{activeDialogFormatLabel}</span>
+                      <span className="time-range-arrow">&gt;</span>
+                    </button>
+                    {showSessionFormatSelect && (
+                      <div className="dialog-format-dropdown">
+                        {formatOptions.map(option => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={`dialog-format-option ${options.format === option.value ? 'active' : ''}`}
+                            onClick={() => {
+                              setOptions(prev => ({ ...prev, format: option.value as TextExportFormat }))
+                              setShowSessionFormatSelect(false)
+                            }}
+                          >
+                            <span className="option-label">{option.label}</span>
+                            <span className="option-desc">{option.desc}</span>
+                          </button>
+                        ))}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <h4>{exportDialog.scope === 'sns' ? '朋友圈导出格式选择' : '对话文本导出格式选择'}</h4>
+              )}
+              {!isContentScopeDialog && exportDialog.scope !== 'sns' && (
+                <div className="format-note">{avatarExportStatusLabel}</div>
+              )}
+              {isContentTextDialog && (
+                <div className="format-note">{avatarExportStatusLabel}</div>
+              )}
+              {!useCollapsedSessionFormatSelector && (
+                <div className="format-grid">
+                  {formatCandidateOptions.map(option => (
+                    <button
+                      key={option.value}
+                      className={`format-card ${exportDialog.scope === 'sns'
+                        ? (snsExportFormat === option.value ? 'active' : '')
+                        : (options.format === option.value ? 'active' : '')}`}
+                      onClick={() => {
+                        if (exportDialog.scope === 'sns') {
+                          setSnsExportFormat(option.value as SnsTimelineExportFormat)
+                        } else {
+                          setOptions(prev => ({ ...prev, format: option.value as TextExportFormat }))
+                        }
+                      }}
+                    >
+                      <div className="format-label">{option.label}</div>
+                      <div className="format-desc">{option.desc}</div>
+                    </button>
+                  ))}
                 </div>
               )}
+            </div>
+          )}
 
-              {shouldRenderImageDeepSearchToggle && (
-                <div className={`dialog-collapse-slot ${shouldShowImageDeepSearchToggle ? 'open' : ''}`} aria-hidden={!shouldShowImageDeepSearchToggle}>
+          <div className="dialog-section">
+            <div className="section-header-action">
+              <h4>时间范围</h4>
+              <button
+                type="button"
+                className="time-range-trigger"
+                onClick={openTimeRangeDialog}
+                disabled={isResolvingTimeRangeBounds}
+              >
+                <span>{isResolvingTimeRangeBounds ? '正在统计可选时间...' : timeRangeSummaryLabel}</span>
+                <span className="time-range-arrow">&gt;</span>
+              </button>
+            </div>
+          </div>
+
+          {shouldShowMediaSection && !isSessionScopeDialog && (
+            <div className="dialog-section">
+              <div className="section-header-action media-section-header">
+                <h4>{exportDialog.scope === 'sns' ? '媒体文件（可多选）' : '媒体内容'}</h4>
+                <span className="media-selection-pill">{mediaSelectionSummaryLabel}</span>
+              </div>
+              <div className="media-option-grid">
+                {dialogMediaOptions.map(option => {
+                  const Icon = option.icon
+                  return (
+                    <label key={option.key} className={`media-option-card ${option.checked ? 'active' : ''}`}>
+                      <input
+                        className="media-option-input"
+                        type="checkbox"
+                        checked={option.checked}
+                        onChange={event => option.onToggle(event.target.checked)}
+                      />
+                      <span className="media-option-main">
+                        <span className="media-option-icon">
+                          <Icon size={16} />
+                        </span>
+                        <span className="media-option-text">
+                          <span className="media-option-label">{option.label}</span>
+                          <span className="media-option-desc">{option.desc}</span>
+                        </span>
+                      </span>
+                      <span className={`media-option-check ${option.checked ? 'active' : ''}`}>
+                        <Check size={12} />
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+              {exportDialog.scope !== 'sns' && (
+                <div
+                  className={`dialog-collapse-slot ${options.exportFiles ? 'open' : ''}`}
+                  aria-hidden={!options.exportFiles}
+                >
                   <div className="dialog-collapse-inner">
-                    <div className="dialog-section">
-                      <div className="dialog-switch-row">
-                        <div className="dialog-switch-copy">
-                          <h4>缺图时深度搜索</h4>
-                          <div className="format-note">关闭后仅尝试 hardlink 命中，未命中将直接显示占位符，导出速度更快。</div>
-                        </div>
-                        <button
-                          type="button"
-                          className={`dialog-switch ${options.imageDeepSearchOnMiss ? 'on' : ''}`}
-                          aria-pressed={options.imageDeepSearchOnMiss}
-                          aria-label="切换缺图时深度搜索"
-                          onClick={() => setOptions(prev => ({ ...prev, imageDeepSearchOnMiss: !prev.imageDeepSearchOnMiss }))}
-                        >
-                          <span className="dialog-switch-thumb" />
-                        </button>
+                    <div className="file-size-subsection">
+                      <div className="file-size-subsection-header">
+                        <div className="file-size-heading">文件大小上限</div>
+                        <div className="file-size-current">{fileSizeLimitLabel}</div>
+                      </div>
+                      <div className="file-size-note">
+                        文件导出优先使用消息中的 MD5 做校验；设置上限后，只导出不超过该值的文件。
+                      </div>
+                      <div className="file-size-preset-row">
+                        {FILE_SIZE_PRESETS_MB.map(preset => (
+                          <button
+                            key={preset}
+                            type="button"
+                            className={`file-size-preset-btn ${options.maxFileSizeMb === preset ? 'active' : ''}`}
+                            onClick={() => setOptions(prev => ({ ...prev, maxFileSizeMb: preset }))}
+                          >
+                            {preset === 0 ? '不限' : `${preset}MB`}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="dialog-input-row">
+                        <input
+                          type="number"
+                          min={0}
+                          step={10}
+                          value={options.maxFileSizeMb}
+                          onChange={event => {
+                            const raw = Number(event.target.value)
+                            setOptions(prev => ({ ...prev, maxFileSizeMb: Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0 }))
+                          }}
+                        />
+                        <span>MB</span>
                       </div>
                     </div>
                   </div>
                 </div>
               )}
+            </div>
+          )}
 
-              {isSessionScopeDialog && (
+          {shouldRenderImageDeepSearchToggle && !isSessionScopeDialog && (
+            <div className={`dialog-collapse-slot ${shouldShowImageDeepSearchToggle ? 'open' : ''}`} aria-hidden={!shouldShowImageDeepSearchToggle}>
+              <div className="dialog-collapse-inner">
                 <div className="dialog-section">
                   <div className="dialog-switch-row">
                     <div className="dialog-switch-copy">
-                      <h4>语音转文字</h4>
-                      <div className="format-note">默认状态跟随更多导出设置中的语音转文字开关。</div>
-                      <div className="format-note">{voiceAsTextStatusLabel}</div>
+                      <h4>缺图时深度搜索</h4>
+                      <div className="format-note">关闭后仅尝试 hardlink 命中，未命中将直接显示占位符，导出速度更快。</div>
                     </div>
                     <button
                       type="button"
-                      className={`dialog-switch ${options.exportVoiceAsText ? 'on' : ''}`}
-                      aria-pressed={options.exportVoiceAsText}
-                      aria-label="切换语音转文字"
-                      onClick={() => setOptions(prev => ({ ...prev, exportVoiceAsText: !prev.exportVoiceAsText }))}
+                      className={`dialog-switch ${options.imageDeepSearchOnMiss ? 'on' : ''}`}
+                      aria-pressed={options.imageDeepSearchOnMiss}
+                      aria-label="切换缺图时深度搜索"
+                      onClick={() => setOptions(prev => ({ ...prev, imageDeepSearchOnMiss: !prev.imageDeepSearchOnMiss }))}
                     >
                       <span className="dialog-switch-thumb" />
                     </button>
                   </div>
                 </div>
-              )}
+              </div>
+            </div>
+          )}
 
-              {(shouldShowDisplayNameSection || options.format === 'excel') && (
-                <div className="dialog-section">
-                  {shouldShowDisplayNameSection && (
-                    <>
-                      <h4>发送者名称显示</h4>
-                      <div className="display-name-options" role="radiogroup" aria-label="发送者名称显示">
-                        {displayNameOptions.map(option => {
-                          const isActive = options.displayNamePreference === option.value
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              role="radio"
-                              aria-checked={isActive}
-                              className={`display-name-item ${isActive ? 'active' : ''}`}
-                              onClick={() => setOptions(prev => ({ ...prev, displayNamePreference: option.value }))}
-                            >
-                              <span>{option.label}</span>
-                              <small>{option.desc}</small>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </>
-                  )}
-
-                  {options.format === 'excel' && (
-                    <div className={`dialog-switch-row ${shouldShowDisplayNameSection ? 'nested-row' : ''}`} style={shouldShowDisplayNameSection ? { marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-light)' } : {}}>
-                      <div className="dialog-switch-copy">
-                        <h4>导出完整列</h4>
-                        <div className="format-note">
-                          开启后会在 Excel 表格中拆分出「发送者昵称」、「微信ID」、「备注」等列；群聊会额外包含「群昵称」列，私聊不会显示这一列。关闭则只保留紧凑的「发送者身份」。
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className={`dialog-switch ${!options.excelCompactColumns ? 'on' : ''}`}
-                        aria-pressed={!options.excelCompactColumns}
-                        aria-label="切换导出完整列"
-                        onClick={() => setOptions(prev => ({ ...prev, excelCompactColumns: !prev.excelCompactColumns }))}
-                      >
-                        <span className="dialog-switch-thumb" />
-                      </button>
+          {(shouldShowDisplayNameSection || options.format === 'excel') && (
+            <div className="dialog-section">
+              {shouldShowDisplayNameSection && (
+                <>
+                  <h4>发送者名称显示</h4>
+                  {isSessionScopeDialog ? (
+                    <AntdRadio.Group
+                      value={options.displayNamePreference}
+                      onChange={(e) => setOptions(prev => ({ ...prev, displayNamePreference: e.target.value }))}
+                      style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}
+                    >
+                      {displayNameOptions.map(option => (
+                        <AntdRadio key={option.value} value={option.value} style={{ display: 'flex', alignItems: 'flex-start', padding: '6px 0' }}>
+                          <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>{option.label}</span>
+                            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{option.desc}</span>
+                          </span>
+                        </AntdRadio>
+                      ))}
+                    </AntdRadio.Group>
+                  ) : (
+                    <div className="display-name-options" role="radiogroup" aria-label="发送者名称显示">
+                      {displayNameOptions.map(option => {
+                        const isActive = options.displayNamePreference === option.value
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={isActive}
+                            className={`display-name-item ${isActive ? 'active' : ''}`}
+                            onClick={() => setOptions(prev => ({ ...prev, displayNamePreference: option.value }))}
+                          >
+                            <span>{option.label}</span>
+                            <small>{option.desc}</small>
+                          </button>
+                        )
+                      })}
                     </div>
                   )}
+                </>
+              )}
+
+              {options.format === 'excel' && !isSessionScopeDialog && (
+                <div className={`dialog-switch-row ${shouldShowDisplayNameSection ? 'nested-row' : ''}`} style={shouldShowDisplayNameSection ? { marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-light)' } : {}}>
+                  <div className="dialog-switch-copy">
+                    <h4>导出完整列</h4>
+                    <div className="format-note">
+                      开启后会在 Excel 表格中拆分出「发送者昵称」、「微信ID」、「备注」等列；群聊会额外包含「群昵称」列，私聊不会显示这一列。关闭则只保留紧凑的「发送者身份」。
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`dialog-switch ${!options.excelCompactColumns ? 'on' : ''}`}
+                    aria-pressed={!options.excelCompactColumns}
+                    aria-label="切换导出完整列"
+                    onClick={() => setOptions(prev => ({ ...prev, excelCompactColumns: !prev.excelCompactColumns }))}
+                  >
+                    <span className="dialog-switch-thumb" />
+                  </button>
                 </div>
               )}
             </div>
+          )}
+        </div>
 
-            <div className="dialog-actions">
-              <button className="secondary-btn" onClick={closeExportDialog}>取消</button>
-              <button className="primary-btn" onClick={() => void createTask()} disabled={!canCreateTask}>
-                <Download size={14} /> 创建导出任务
-              </button>
-            </div>
-
-            <ExportDateRangeDialog
-              open={isTimeRangeDialogOpen}
-              value={timeRangeSelection}
-              minDate={timeRangeBounds?.minDate}
-              maxDate={timeRangeBounds?.maxDate}
-              onClose={closeTimeRangeDialog}
-              onConfirm={(nextSelection) => {
-                setTimeRangeSelection(nextSelection)
-                setOptions(prev => ({
-                  ...prev,
-                  useAllTime: nextSelection.useAllTime,
-                  dateRange: cloneExportDateRange(nextSelection.dateRange)
-                }))
-                closeTimeRangeDialog()
-              }}
-            />
-          </div>
-        </div>,
-        document.body
-      )}
+        <ExportDateRangeDialog
+          open={isTimeRangeDialogOpen}
+          value={timeRangeSelection}
+          minDate={timeRangeBounds?.minDate}
+          maxDate={timeRangeBounds?.maxDate}
+          onClose={closeTimeRangeDialog}
+          onConfirm={(nextSelection) => {
+            setTimeRangeSelection(nextSelection)
+            setOptions(prev => ({
+              ...prev,
+              useAllTime: nextSelection.useAllTime,
+              dateRange: cloneExportDateRange(nextSelection.dateRange)
+            }))
+            closeTimeRangeDialog()
+          }}
+        />
+      </AntdModal>
     </div>
   )
 }
